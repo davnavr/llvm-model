@@ -243,4 +243,6 @@ impl std::default::Default for Triple {
     }
 }
 
-//pub struct Layout
+pub mod layout;
+
+pub use layout::Layout;
