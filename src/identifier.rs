@@ -57,6 +57,12 @@ impl AsRef<str> for Id {
 
 impl Debug for Id {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        Display::fmt(&self.0, f)
+    }
+}
+
+impl Display for Id {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         for c in self.chars() {
             if c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '.' {
                 f.write_char(c)?;
@@ -70,13 +76,8 @@ impl Debug for Id {
     }
 }
 
-impl Display for Id {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        Display::fmt(&self.0, f)
-    }
-}
-
 /// An owned identifier string.
+#[derive(Clone)]
 #[repr(transparent)]
 pub struct Identifier(String);
 
@@ -95,8 +96,13 @@ impl TryFrom<String> for Identifier {
 
     fn try_from(identifier: String) -> Result<Self, Self::Error> {
         <&Id>::try_from(identifier.as_str())?;
-        // Safety: Check for null bytes is performed earlier.
-        Ok(unsafe { Self::new_unchecked(identifier) })
+        Ok(Self(identifier))
+    }
+}
+
+impl std::default::Default for Identifier {
+    fn default() -> Self {
+        Self(String::default())
     }
 }
 
