@@ -9,3 +9,6 @@ readme = "README.md"
 
 [dependencies]
 llvm-sys = "130"
+
+[features]
+inkwell-compatibility = []
