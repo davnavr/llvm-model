@@ -2,7 +2,7 @@
 
 use std::collections::hash_map;
 use std::fmt::{Debug, Display, Formatter, Write as _};
-use std::num::{NonZeroU16, NonZeroU8};
+use std::num::{NonZeroU16, NonZeroU32, NonZeroU8};
 
 /// Specifies whether data is laid out in big-endian or little-endian form.
 #[derive(Clone, Debug)]
@@ -81,31 +81,51 @@ impl AddressSpace {
 #[derive(Copy, Clone, Eq, Hash, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub struct BitSize {
-    bytes: NonZeroU8,
+    bits: NonZeroU32,
 }
 
 impl BitSize {
-    /// 64-bits, or 8 bytes.
+    /// 1-bit, used in LLVM for boolean values.
+    pub const SIZE_1: Self = Self {
+        bits: unsafe { NonZeroU32::new_unchecked(1) },
+    };
+
+    /// 8 bits, or 1 byte.
+    pub const SIZE_8: Self = Self {
+        bits: unsafe { NonZeroU32::new_unchecked(8) },
+    };
+
+    /// 16 bits, or 2 bytes.
+    pub const SIZE_16: Self = Self {
+        bits: unsafe { NonZeroU32::new_unchecked(16) },
+    };
+
+    /// 32 bits, or 4 bytes.
+    pub const SIZE_32: Self = Self {
+        bits: unsafe { NonZeroU32::new_unchecked(32) },
+    };
+
+    /// 64 bits, or 8 bytes.
     pub const SIZE_64: Self = Self {
-        bytes: unsafe { NonZeroU8::new_unchecked(8) },
+        bits: unsafe { NonZeroU32::new_unchecked(64) },
+    };
+
+    /// 128 bits, or 16 bytes.
+    pub const SIZE_128: Self = Self {
+        bits: unsafe { NonZeroU32::new_unchecked(128) },
     };
 
     /// Creates a size from a value, in bytes.
-    pub const fn from_bytes(size: NonZeroU8) -> Self {
-        Self { bytes: size }
-    }
-
-    /// Gets the size, in bytes.
-    pub const fn bytes(self) -> NonZeroU8 {
-        self.bytes
+    pub fn from_bytes(size: NonZeroU8) -> Self {
+        Self {
+            bits: // Safety: size is guaranteed to be non-zero.
+                unsafe { NonZeroU32::new_unchecked(u32::from(size.get()) * 8) }
+        }
     }
 
     /// Gets the size, in bits.
-    pub fn bits(self) -> NonZeroU16 {
-        unsafe {
-            // Safety: bytes is guaranteed to not be zero.
-            NonZeroU16::new_unchecked(u16::from(self.bytes.get()) * 8)
-        }
+    pub fn bits(self) -> NonZeroU32 {
+        self.bits
     }
 }
 
@@ -116,9 +136,10 @@ impl Debug for BitSize {
 }
 
 /// Specifies an ABI and an optional preferred alignment. If the preferred alignment is omitted, the ABI alignment is used.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AlignmentPair {
-    abi: BitSize,
+    // TODO: How to allow ABI alignment of 0
+    abi: Option<BitSize>,
     preferred: Option<BitSize>,
 }
 
@@ -128,18 +149,26 @@ impl AlignmentPair {
     /// Creates a new alignment value, omitting the preferred alignment value.
     pub const fn new(abi_alignment: BitSize) -> Self {
         Self {
-            abi: abi_alignment,
+            abi: Some(abi_alignment),
             preferred: None,
         }
     }
 
-    /// Creates a new alignment value, omitting the preferred alignment value.
+    /// Creates a new alignment value.
     pub const fn with_preferred_alignment(
         abi_alignment: BitSize,
         preferred_alignment: BitSize,
     ) -> Self {
         Self {
-            abi: abi_alignment,
+            abi: Some(abi_alignment),
+            preferred: Some(preferred_alignment),
+        }
+    }
+
+    /// Creates a new alignment value, with an ABI alignment of zero.
+    pub const fn with_preferred_only(preferred_alignment: BitSize) -> Self {
+        Self {
+            abi: None,
             preferred: Some(preferred_alignment),
         }
     }
@@ -149,14 +178,16 @@ impl AlignmentPair {
         self.preferred.is_none()
     }
 
-    /// Gets the ABI alignment value.
-    pub const fn abi_alignment(&self) -> BitSize {
-        self.abi
+    /// Gets the ABI alignment value, in bits.
+    pub fn abi_alignment(&self) -> u32 {
+        self.abi.map(|size| size.bits().get()).unwrap_or_default()
     }
 
-    /// Gets the preferred alignment value, defaulting to the ABI alignment if the former is omitted.
-    pub const fn preferred_alignment(&self) -> BitSize {
-        self.preferred.unwrap_or(self.abi)
+    /// Gets the preferred alignment value in bits, defaulting to the ABI alignment if the former is omitted.
+    pub fn preferred_alignment(&self) -> u32 {
+        self.preferred
+            .map(|size| size.bits().get())
+            .unwrap_or(self.abi_alignment())
     }
 }
 
@@ -210,7 +241,7 @@ impl PointerLayoutMap {
     /// Inserts a pointer layout for a particular address space.
     pub fn insert(&mut self, layout: PointerLayout) -> Result<&PointerLayout, &PointerLayout> {
         if self.is_all_default() {
-            Err(&PointerLayout::LAYOUT_64_BIT)
+            Ok(&PointerLayout::LAYOUT_64_BIT)
         } else {
             match self.layouts.entry(layout.address_space) {
                 hash_map::Entry::Vacant(vacant) => Ok(vacant.insert(layout)),
@@ -234,10 +265,53 @@ pub struct PrimitiveAlignmentMap {
     layouts: hash_map::HashMap<BitSize, AlignmentPair>,
 }
 
+lazy_static::lazy_static! {
+    static ref INTEGER_ALIGNMENT_DEFAULTS: PrimitiveAlignmentMap = PrimitiveAlignmentMap {
+        layouts: hash_map::HashMap::from([
+            (BitSize::SIZE_1, AlignmentPair::new(BitSize::SIZE_8)),
+            (BitSize::SIZE_8, AlignmentPair::new(BitSize::SIZE_8)),
+            (BitSize::SIZE_16, AlignmentPair::new(BitSize::SIZE_16)),
+            (BitSize::SIZE_32, AlignmentPair::new(BitSize::SIZE_32)),
+            (BitSize::SIZE_64, AlignmentPair::new(BitSize::SIZE_64)),
+        ])
+    };
+
+    static ref FLOAT_ALIGNMENT_DEFAULTS: PrimitiveAlignmentMap = PrimitiveAlignmentMap {
+        layouts: hash_map::HashMap::from([
+            (BitSize::SIZE_16, AlignmentPair::new(BitSize::SIZE_16)),
+            (BitSize::SIZE_32, AlignmentPair::new(BitSize::SIZE_32)),
+            (BitSize::SIZE_64, AlignmentPair::new(BitSize::SIZE_64)),
+            (BitSize::SIZE_128, AlignmentPair::new(BitSize::SIZE_128)),
+        ])
+    };
+
+    static ref VECTOR_ALIGNMENT_DEFAULTS: PrimitiveAlignmentMap = PrimitiveAlignmentMap {
+        layouts: hash_map::HashMap::from([
+            (BitSize::SIZE_64, AlignmentPair::new(BitSize::SIZE_64)),
+            (BitSize::SIZE_128, AlignmentPair::new(BitSize::SIZE_128)),
+        ])
+    };
+}
+
 impl PrimitiveAlignmentMap {
+    /// The default alignment values used for integers.
+    pub fn integer_defaults() -> &'static Self {
+        &INTEGER_ALIGNMENT_DEFAULTS
+    }
+
+    /// The default alignment values used for floating-point types.
+    pub fn float_defaults() -> &'static Self {
+        &FLOAT_ALIGNMENT_DEFAULTS
+    }
+
+    /// The default alignment values used for vectors.
+    pub fn vector_defaults() -> &'static Self {
+        &VECTOR_ALIGNMENT_DEFAULTS
+    }
+
     /// Gets the alignment for a value of a particular size.
-    pub fn get(&self, size: BitSize) -> Option<AlignmentPair> {
-        self.layouts.get(&size).copied()
+    pub fn get(&self, size: BitSize) -> Option<&AlignmentPair> {
+        self.layouts.get(&size)
     }
 }
 
@@ -263,17 +337,17 @@ impl FunctionAlignment {
     }
 }
 
-/// Indicates how private symbols are mangled.
+/// Indicates how symbols are mangled.
 #[derive(Clone, Debug)]
 #[non_exhaustive]
 pub enum Mangling {
-    /// The Executable and Linkable Format used in Unix-like systems, using the prefix `.L`.
+    /// The Executable and Linkable Format used in Unix-like systems, which uses the prefix `.L` for private symbols.
     ELF,
-    /// IBM's Generalized Object File Format, which uses the prefix `@`.
+    /// IBM's Generalized Object File Format, which uses the prefix `@` for private symbols.
     GOFF,
     /// `$`
     MIPS,
-    /// Apple's Mach object file format, which uses the prefix `L`.
+    /// Apple's Mach object file format, which uses the prefix `L` for private symbols.
     MachO,
     WindowsX86COFF,
     WindowsCOFF,
@@ -300,7 +374,9 @@ pub struct Layout {
     pub float_alignments: PrimitiveAlignmentMap,
     pub aggregate_object_alignment: AlignmentPair,
     pub function_pointer_alignment: Option<FunctionAlignment>,
-    pub mangling: Mangling,
+    /// Specifies how symbol names are mangled in the output.
+    pub mangling: Option<Mangling>,
+    /// Indicates the native integer widths for the target CPU.
     pub native_integer_widths: Vec<BitSize>,
     //pub non_integral_pointer_types: ,
 }
@@ -310,7 +386,17 @@ impl Default for Layout {
         Self {
             endianness: Endianness::Little,
             stack_alignment: StackAlignment::default(),
+            program_address_space: AddressSpace::VON_NEUMANN_DEFAULT,
+            global_address_space: AddressSpace::VON_NEUMANN_DEFAULT,
+            alloca_address_space: AddressSpace::VON_NEUMANN_DEFAULT,
+            pointer_layouts: PointerLayoutMap::all_default(),
+            integer_alignments: PrimitiveAlignmentMap::integer_defaults().clone(),
+            vector_alignments: PrimitiveAlignmentMap::vector_defaults().clone(),
+            float_alignments: PrimitiveAlignmentMap::float_defaults().clone(),
+            aggregate_object_alignment: AlignmentPair::with_preferred_only(BitSize::SIZE_64),
             function_pointer_alignment: None,
+            mangling: None,
+            native_integer_widths: Vec::default(),
         }
     }
 }

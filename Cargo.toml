@@ -9,6 +9,7 @@ readme = "README.md"
 
 [dependencies]
 thiserror = "1.0.30"
+lazy_static = "1.4.0"
 llvm-sys = "130"
 
 [features]
