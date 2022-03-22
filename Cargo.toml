@@ -1,0 +1,11 @@
+[package]
+name = "llvm-model"
+description = "A safer library to help with generation of LLVM IR"
+repository = "https://github.com/davnavr/llvm-model"
+version = "0.1.0"
+edition = "2021"
+keywords = ["llvm"]
+readme = "README.md"
+
+[dependencies]
+llvm-sys = "130"

@@ -1,2 +1,2 @@
 # llvm-model
- Rust library for writting LLVM IR
+Rust library for writing LLVM IR
