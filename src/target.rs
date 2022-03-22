@@ -30,9 +30,21 @@ impl Architecture {
     /// The architecture corresponding to the target that this library and your code is compiled for.
     ///
     /// If the target architecture is exotic, defaults to [`Architecture::Unknown`].
-    pub fn current() -> Self {
+    pub const fn current() -> Self {
         if cfg!(target_arch = "x86_64") {
             Self::X86_64
+        } else if cfg!(target_arch = "aarch64") {
+            Self::AArch64
+        } else if cfg!(target_arch = "x86") {
+            Self::X86
+        } else if cfg!(target_arch = "mips") {
+            Self::MIPS
+        } else if cfg!(target_arch = "arm") {
+            Self::ARM
+        } else if cfg!(target_arch = "wasm32") {
+            Self::Wasm32
+        } else if cfg!(target_arch = "wasm64") {
+            Self::Wasm64
         } else {
             Self::Unknown
         }
@@ -47,10 +59,24 @@ crate::enum_default!(Architecture, Unknown);
 pub enum Vendor {
     /// An unknown vendor.
     Unknown,
-    //PC,
+    /// Vendor used for some windows and linux targets.
+    PC,
 }
 
 crate::enum_default!(Vendor, Unknown);
+
+impl Vendor {
+    /// The vendor corresponding to the target that this library and your code is compiled for.
+    ///
+    /// Defaults to [`Architecture::Unknown`].
+    pub const fn current() -> Self {
+        if cfg!(target_vendor = "pc") {
+            Self::PC
+        } else {
+            Self::Unknown
+        }
+    }
+}
 
 /// The operating system of a target triple.
 #[derive(Copy, Clone, Debug)]
@@ -58,6 +84,8 @@ crate::enum_default!(Vendor, Unknown);
 pub enum OperatingSystem {
     /// An unknown operating system, usually the operating system that is being targeted is known.
     Unknown,
+    /// Indicates that code compiled for this target is running on the bare metal.
+    None,
     /// Operating system for Apple's iPhone.
     IOS,
     /// A family of Unix-like operating systems.
@@ -67,18 +95,19 @@ pub enum OperatingSystem {
     /// The [WebAssembly System Interface](https://github.com/WebAssembly/WASI), which allows WebAssembly programs to interact
     /// with the outside world.
     WASI,
-    /// 32-bit version of the Windows family of operating systems.
-    Win32,
-    //Windows,
+    /// The Windows family of operating systems created by Microsoft.
+    Windows,
 }
 
 impl OperatingSystem {
     /// The operating system that this library and your code is targeting.
     ///
     /// Defaults to [`OperatingSystem::Unknown`].
-    pub fn current() -> Self {
+    pub const fn current() -> Self {
         if cfg!(target_os = "linux") {
             Self::Linux
+        } else if cfg!(target_os = "windows") {
+            Self::Windows
         } else {
             Self::Unknown
         }
@@ -111,7 +140,7 @@ impl Environment {
     /// The environment that this library and your code is targeting.
     ///
     /// Defaults to [`Environment::Unknown`].
-    pub fn current() -> Self {
+    pub const fn current() -> Self {
         if cfg!(target_env = "gnu") {
             Self::GNU
         } else if cfg!(target_env = "musl") {
@@ -133,8 +162,46 @@ crate::enum_default!(Environment, Unknown);
 pub struct KnownTriple {
     architecture: Architecture,
     vendor: Vendor,
-    os: OperatingSystem,
+    operating_system: OperatingSystem,
     environment: Environment,
+}
+
+const CURRENT_TARGET_TRIPLE: KnownTriple = KnownTriple {
+    architecture: Architecture::current(),
+    vendor: Vendor::current(),
+    operating_system: OperatingSystem::current(),
+    environment: Environment::current(),
+};
+
+impl KnownTriple {
+    /// Creates a target triple
+    pub fn with_environment(
+        architecture: Architecture,
+        vendor: Vendor,
+        operating_system: OperatingSystem,
+        environment: Environment,
+    ) -> Self {
+        Self {
+            architecture,
+            vendor,
+            operating_system,
+            environment,
+        }
+    }
+
+    /// Creates a target triple with an unknown environment.
+    pub fn with_operating_system(
+        architecture: Architecture,
+        vendor: Vendor,
+        operating_system: OperatingSystem,
+    ) -> Self {
+        Self::with_environment(architecture, vendor, operating_system, Environment::Unknown)
+    }
+
+    /// The target triple corresponding to the target that this library and your code is compiled for.
+    pub const fn current() -> &'static KnownTriple {
+        &CURRENT_TARGET_TRIPLE
+    }
 }
 
 /// An LLVM target triple, typically in the format `ARCHITECTURE-VENDOR-OPERATING_SYSTEM`.
@@ -142,6 +209,8 @@ pub struct KnownTriple {
 #[non_exhaustive]
 pub enum Triple {
     /// A custom LLVM target triple.
+    ///
+    /// Use this if you need to specify certain advanced options such as the sub-architecture or ABI.
     Custom(Identifier),
     /// A target triple that is not custom.
     Known(KnownTriple),

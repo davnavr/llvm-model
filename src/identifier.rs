@@ -77,7 +77,7 @@ impl Display for Id {
 }
 
 /// An owned identifier string.
-#[derive(Clone)]
+#[derive(Clone, Default)]
 #[repr(transparent)]
 pub struct Identifier(String);
 
@@ -97,12 +97,6 @@ impl TryFrom<String> for Identifier {
     fn try_from(identifier: String) -> Result<Self, Self::Error> {
         <&Id>::try_from(identifier.as_str())?;
         Ok(Self(identifier))
-    }
-}
-
-impl std::default::Default for Identifier {
-    fn default() -> Self {
-        Self(String::default())
     }
 }
 
