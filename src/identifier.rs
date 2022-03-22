@@ -63,16 +63,7 @@ impl Debug for Id {
 
 impl Display for Id {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        for c in self.chars() {
-            if c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '.' {
-                f.write_char(c)?;
-            } else {
-                for b in c.encode_utf8(&mut [0; 4]).bytes() {
-                    write!(f, "\\{0:x}", b)?;
-                }
-            }
-        }
-        Ok(())
+        Debug::fmt(&self, f)
     }
 }
 
