@@ -202,6 +202,26 @@ impl KnownTriple {
     pub const fn current() -> &'static KnownTriple {
         &CURRENT_TARGET_TRIPLE
     }
+
+    /// Gets the architecture of this target triple, which describes the instruction set being used.
+    pub fn architecture(&self) -> &Architecture {
+        &self.architecture
+    }
+
+    /// Gets the vendor component of this target triple.
+    pub fn vendor(&self) -> &Vendor {
+        &self.vendor
+    }
+
+    /// Gets the system component of this target triple.
+    pub fn operating_system(&self) -> &OperatingSystem {
+        &self.operating_system
+    }
+
+    /// Gets the environment component of this target triple.
+    pub fn environment(&self) -> &Environment {
+        &self.environment
+    }
 }
 
 /// An LLVM target triple, typically in the format `ARCHITECTURE-VENDOR-OPERATING_SYSTEM`.
