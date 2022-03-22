@@ -8,6 +8,7 @@ keywords = ["llvm"]
 readme = "README.md"
 
 [dependencies]
+thiserror = "1.0.30"
 llvm-sys = "130"
 
 [features]
