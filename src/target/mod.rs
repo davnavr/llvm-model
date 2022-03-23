@@ -125,7 +125,7 @@ pub enum Environment {
     /// Family of open-source software that includes an implementation of the C standard library called
     /// [`glibc`](https://www.gnu.org/software/libc/).
     GNU,
-    /// Open-source implementation of the C standard library (https://musl.libc.org/).
+    /// Open-source implementation of the C standard library (<https://musl.libc.org/>).
     MUSL,
     /// The Microsoft Visual C/C++ toolchain, available on windows as an additional component for Visual Studio.
     MSVC,

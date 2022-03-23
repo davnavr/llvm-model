@@ -2,7 +2,7 @@
 //! LLVM uses null-terminated strings, so `null` bytes are not allowed in names.
 
 use std::convert::AsRef;
-use std::fmt::{Debug, Display, Formatter, Write};
+use std::fmt::{Debug, Display, Formatter};
 use std::ops::{Deref, DerefMut};
 
 // TODO: Should identifiers contain only valid ASCII?

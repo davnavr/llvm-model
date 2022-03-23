@@ -2,7 +2,7 @@
 
 use std::collections::hash_map;
 use std::fmt::{Debug, Display, Formatter, Write as _};
-use std::num::{NonZeroU16, NonZeroU32, NonZeroU8};
+use std::num::{NonZeroU32, NonZeroU8};
 
 /// Specifies whether data is laid out in big-endian or little-endian form.
 #[derive(Clone, Debug)]
