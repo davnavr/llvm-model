@@ -468,15 +468,13 @@ impl Machine {
 #[derive(Clone, Debug)]
 pub struct Target {
     machine: Machine,
-    layout: Layout
+    layout: Layout,
 }
 
 impl Target {
     /// Creates a target to describe a host from a target machine and layout.
     pub fn new(machine: Machine, layout: Layout) -> Self {
-        Self {
-            machine, layout
-        }
+        Self { machine, layout }
     }
 
     /// Gets the target triple for this target.

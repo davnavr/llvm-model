@@ -11,6 +11,7 @@ pub mod module;
 pub mod target;
 
 pub use module::Module;
+pub use target::Target;
 
 /// Internal helper used to define a default value for enumerations.
 #[doc(hidden)]
