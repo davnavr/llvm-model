@@ -11,6 +11,8 @@ readme = "README.md"
 thiserror = "1.0.30"
 lazy_static = "1.4.0"
 llvm-sys = { version = "130", optional = true }
+inkwell = { git = "https://github.com/TheDan64/inkwell", rev = "c71d7ed", optional = true, features = [ "llvm13-0" ] }
 
 [features]
 llvm_sys_interop = [ "llvm-sys" ]
+inkwell_interop = [ "inkwell" ]
