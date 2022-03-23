@@ -2,6 +2,8 @@
 //! LLVM uses null-terminated strings, so `null` bytes are not allowed in names.
 
 use std::convert::AsRef;
+use std::borrow::{Borrow, ToOwned};
+use std::ffi::{CStr, CString};
 use std::fmt::{Debug, Display, Formatter};
 use std::ops::{Deref, DerefMut};
 
@@ -25,6 +27,11 @@ impl Id {
     pub unsafe fn new_unchecked<'a>(identifier: &'a str) -> &'a Self {
         // Safety: A transparent representation is used for Id, so a &str should be compatible with a &Id
         &*(identifier as *const str as *const Self)
+    }
+
+    /// Copies the contents of this identifier into a C-compatible string.
+    pub fn to_c_string(&self) -> CString {
+        self.to_owned().into_c_string()
     }
 }
 
@@ -55,6 +62,17 @@ impl AsRef<str> for Id {
     }
 }
 
+impl ToOwned for Id {
+    type Owned = Identifier;
+
+    fn to_owned(&self) -> Self::Owned {
+        unsafe {
+            // Safety: Id is guaranteed to not contain any nul bytes.
+            Identifier::new_unchecked(self.0.to_string())
+        }
+    }
+}
+
 impl Debug for Id {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         Display::fmt(&self.0, f)
@@ -79,6 +97,21 @@ impl Identifier {
     /// The caller must ensure that the identifier does not contain any `null` bytes.
     pub unsafe fn new_unchecked(identifier: String) -> Self {
         Self(identifier)
+    }
+
+    /// Borrows the contents of this identifier string.
+    #[allow(clippy::needless_lifetimes)]
+    pub fn as_id<'a>(&'a self) -> &'a Id {
+        // Safety: The constructors of Identifier use the same validation checks for the constructors of Id.
+        unsafe { Id::new_unchecked(&self.0) }
+    }
+
+    /// Interprets this identifier as vector of bytes to convert it into a C-compatible string.
+    pub fn into_c_string(self) -> CString {
+        unsafe {
+            // Safety: A nul byte is appended by the callee, and we ensure that no interior nul bytes exist.
+            CString::from_vec_unchecked(self.0.into())
+        }
     }
 }
 
@@ -107,8 +140,13 @@ impl DerefMut for Identifier {
 
 impl AsRef<Id> for Identifier {
     fn as_ref(&self) -> &Id {
-        // Safety: The constructors of Identifier use the same validation checks for the constructors of Id.
-        unsafe { Id::new_unchecked(&self.0) }
+        self.as_id()
+    }
+}
+
+impl Borrow<Id> for Identifier {
+    fn borrow(&self) -> &Id {
+        self.as_id()
     }
 }
 
