@@ -28,10 +28,10 @@ pub enum Architecture {
 }
 
 impl Architecture {
-    /// The architecture corresponding to the target that this library and your code is compiled for.
+    /// An estimate for the architecture corresponding to the target that this library and your code is compiled for.
     ///
     /// If the target architecture is exotic, defaults to [`Architecture::Unknown`].
-    pub const fn current() -> Self {
+    pub const fn current_estimate() -> Self {
         if cfg!(target_arch = "x86_64") {
             Self::X86_64
         } else if cfg!(target_arch = "aarch64") {
@@ -82,10 +82,10 @@ pub enum Vendor {
 crate::enum_default!(Vendor, Unknown);
 
 impl Vendor {
-    /// The vendor corresponding to the target that this library and your code is compiled for.
+    /// An estimate for the vendor corresponding to the target that this library and your code is compiled for.
     ///
     /// Defaults to [`Architecture::Unknown`].
-    pub const fn current() -> Self {
+    pub const fn current_estimate() -> Self {
         if cfg!(target_vendor = "pc") {
             Self::PC
         } else {
@@ -125,10 +125,10 @@ pub enum OperatingSystem {
 }
 
 impl OperatingSystem {
-    /// The operating system that this library and your code is targeting.
+    /// An estimate for the operating system that this library and your code is targeting.
     ///
     /// Defaults to [`OperatingSystem::Unknown`].
-    pub const fn current() -> Self {
+    pub const fn current_estimate() -> Self {
         if cfg!(target_os = "linux") {
             Self::Linux
         } else if cfg!(target_os = "windows") {
@@ -176,10 +176,10 @@ pub enum Environment {
 }
 
 impl Environment {
-    /// The environment that this library and your code is targeting.
+    /// An estimate for the environment that this library and your code is targeting.
     ///
     /// Defaults to [`Environment::Unknown`].
-    pub const fn current() -> Self {
+    pub const fn current_estimate() -> Self {
         if cfg!(target_env = "gnu") {
             Self::GNU
         } else if cfg!(target_env = "musl") {
@@ -218,10 +218,10 @@ pub struct KnownTriple {
 }
 
 const CURRENT_TARGET_TRIPLE: KnownTriple = KnownTriple {
-    architecture: Architecture::current(),
-    vendor: Vendor::current(),
-    operating_system: OperatingSystem::current(),
-    environment: Environment::current(),
+    architecture: Architecture::current_estimate(),
+    vendor: Vendor::current_estimate(),
+    operating_system: OperatingSystem::current_estimate(),
+    environment: Environment::current_estimate(),
 };
 
 impl KnownTriple {
@@ -249,8 +249,8 @@ impl KnownTriple {
         Self::with_environment(architecture, vendor, operating_system, Environment::Unknown)
     }
 
-    /// The target triple corresponding to the target that this library and your code is compiled for.
-    pub const fn current() -> &'static KnownTriple {
+    /// An estimate for the target triple corresponding to the target that this library and your code is compiled for.
+    pub const fn current_estimate() -> &'static KnownTriple {
         &CURRENT_TARGET_TRIPLE
     }
 
