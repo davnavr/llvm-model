@@ -464,6 +464,37 @@ impl Machine {
     }
 }
 
+/// A target machine and layout, fully describing the host that will run a module's code.
+#[derive(Clone, Debug)]
+pub struct Target {
+    machine: Machine,
+    layout: Layout
+}
+
+impl Target {
+    /// Creates a target to describe a host from a target machine and layout.
+    pub fn new(machine: Machine, layout: Layout) -> Self {
+        Self {
+            machine, layout
+        }
+    }
+
+    /// Gets the target triple for this target.
+    pub fn triple(&self) -> &Triple {
+        self.machine().target_triple()
+    }
+
+    /// Gets the target machine.
+    pub fn machine(&self) -> &Machine {
+        &self.machine
+    }
+
+    /// Gets the target layout.
+    pub fn layout(&self) -> &Layout {
+        &self.layout
+    }
+}
+
 #[cfg(feature = "inkwell_interop")]
 impl From<&'_ Triple> for inkwell::targets::TargetTriple {
     fn from(triple: &Triple) -> Self {
