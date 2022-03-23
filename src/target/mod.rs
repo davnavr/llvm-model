@@ -1,6 +1,6 @@
 //! LLVM target triple and layout information is used to describe the host that will run the code.
 
-use crate::identifier::Identifier;
+use crate::identifier::{Id, Identifier};
 use std::fmt::{Display, Formatter};
 
 /// The Instruction Set Architecture being targeted in a target triple.
@@ -330,6 +330,140 @@ pub mod layout;
 
 pub use layout::Layout;
 
+/// An `LLVMCodeGenOptLevel`, which indicates the level of optimization to use during code generation.
+#[derive(Copy, Clone, Debug)]
+pub enum CodeGenerationOptimization {
+    /// Specifies that optimizations should be disabled, corresponds to `-O0`.
+    None,
+    /// Allows optimizations that preserve the ability to debug the program, corresponds to `-O1`.
+    Less,
+    /// The default optimization level, optimizing for fast execution without significant compile times, corresponds to `-O2`.
+    Default,
+    /// Optimizes for fast execution, corresponds to `-O3`.
+    Aggressive,
+}
+
+crate::enum_default!(CodeGenerationOptimization, Default);
+
+/// An `LLVMRelocMode`, which specifies the if and how code is relocated.
+#[derive(Copy, Clone, Debug)]
+pub enum RelocationMode {
+    /// Some default mode.
+    Default,
+    /// Might refer to code that expects to be loaded at a certain address
+    Static,
+    /// Position-Independent Code.
+    PIC,
+    /// No idea what this means.
+    DynamicNoPIC,
+    /// Read-Only Position Independence, used in embedded systems.
+    ROPI,
+    /// Read-Write Position Independence, used in embedded systems.
+    RWPI,
+    /// Relocation mode used for embedded systems.
+    ROPIRWPI,
+}
+
+crate::enum_default!(RelocationMode, Default);
+
+/// An `LLVMCodeModel`.
+///
+/// According to <https://stackoverflow.com/questions/40493448/what-does-the-codemodel-in-clang-llvm-refer-to#40498306>,
+/// this provides "restrictions on the relative location of code and data".
+#[derive(Copy, Clone, Debug)]
+pub enum CodeModel {
+    /// D
+    Default,
+    /// Default used for Just-in-Time compiled code.
+    JITDefault,
+    /// No idea what tiny will do, might really force things to be close together.
+    Tiny,
+    /// Safe to use for static code, and might be the default value.
+    Small,
+    /// Your guess is as good as mine.
+    Kernel,
+    /// Good if JITing or if ASLR is enabled?
+    Medium,
+    /// Seems to be a good value if data and code is far away.
+    Large,
+}
+
+crate::enum_default!(CodeModel, Default);
+
+/// Represents an LLVM target machine.
+#[derive(Clone, Debug)]
+pub struct Machine {
+    triple: Triple,
+    cpu_name: Identifier,
+    features: Identifier,
+    optimization_level: CodeGenerationOptimization,
+    relocation_mode: RelocationMode,
+    code_model: CodeModel,
+}
+
+impl Machine {
+    /// Creates a new target machine.
+    pub fn new(
+        triple: Triple,
+        cpu_name: Identifier,
+        features: Identifier,
+        optimization_level: CodeGenerationOptimization,
+        relocation_mode: RelocationMode,
+        code_model: CodeModel,
+    ) -> Self {
+        Self {
+            triple,
+            cpu_name,
+            features,
+            optimization_level,
+            relocation_mode,
+            code_model,
+        }
+    }
+
+    /// Creates a new target machine using the default optimization level, relocation mode, and code model.
+    pub fn with_defaults(triple: Triple, cpu_name: Identifier, features: Identifier) -> Self {
+        Self::new(
+            triple,
+            cpu_name,
+            features,
+            CodeGenerationOptimization::default(),
+            RelocationMode::default(),
+            CodeModel::default(),
+        )
+    }
+
+    /// Gets the target triple for this target machine.
+    pub fn target_triple(&self) -> &Triple {
+        &self.triple
+    }
+
+    /// Gets the CPU name of the target machine.
+    pub fn cpu_name(&self) -> &Id {
+        self.cpu_name.as_id()
+    }
+
+    /// A string describing additional features of the target machine.
+    pub fn features(&self) -> &Id {
+        self.features.as_id()
+    }
+
+    /// Gets a value indicating how much code is optimized for this target machine.
+    pub fn code_generation_optimization_level(&self) -> CodeGenerationOptimization {
+        self.optimization_level
+    }
+
+    /// Indicates how code is relocated in this target machine.
+    pub fn relocation_mode(&self) -> RelocationMode {
+        self.relocation_mode
+    }
+
+    /// Gets the code model value used for this target machine.
+    pub fn code_model(&self) -> CodeModel {
+        self.code_model
+    }
+}
+
 #[cfg(feature = "inkwell_interop")]
 impl From<&'_ Triple> for inkwell::targets::TargetTriple {
     fn from(triple: &Triple) -> Self {
@@ -340,9 +474,11 @@ impl From<&'_ Triple> for inkwell::targets::TargetTriple {
 #[cfg(feature = "inkwell_interop")]
 impl Triple {
     /// Retrieves an inkwell Target structure corresponding to this target triple.
-    /// 
-    /// Ensure that targets have been initialized beforehand, such as by calling [`inkwell::targets::Target::initialize_all()`],
-    pub fn to_inkwell_target(&self) -> Result<inkwell::targets::Target, inkwell::support::LLVMString> {
+    ///
+    /// Before calling, ensure that targets have been initialized beforehand, such as by calling [`inkwell::targets::Target::initialize_all()`],
+    pub fn to_inkwell_target(
+        &self,
+    ) -> Result<inkwell::targets::Target, inkwell::support::LLVMString> {
         inkwell::targets::Target::from_triple(&self.into())
     }
 }
