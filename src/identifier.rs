@@ -1,9 +1,9 @@
 //! Contains types to represents strings that can be used in LLVM.
 //! LLVM uses null-terminated strings, so `null` bytes are not allowed in names.
 
-use std::convert::AsRef;
 use std::borrow::{Borrow, ToOwned};
-use std::ffi::{CStr, CString};
+use std::convert::AsRef;
+use std::ffi::CString;
 use std::fmt::{Debug, Display, Formatter};
 use std::ops::{Deref, DerefMut};
 
