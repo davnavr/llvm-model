@@ -10,7 +10,7 @@ readme = "README.md"
 [dependencies]
 thiserror = "1.0.30"
 lazy_static = "1.4.0"
-llvm-sys = "130"
+llvm-sys = { version = "130", optional = true }
 
 [features]
-inkwell-compatibility = []
+llvm_sys_interop = [ "llvm-sys" ]
