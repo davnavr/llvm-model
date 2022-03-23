@@ -1,6 +1,7 @@
 //! LLVM target triple and layout information is used to describe the host that will run the code.
 
 use crate::identifier::Identifier;
+use std::fmt::{Display, Formatter};
 
 /// The Instruction Set Architecture being targeted in a target triple.
 #[derive(Copy, Clone, Debug)]
@@ -20,7 +21,7 @@ pub enum Architecture {
     ///
     /// [See the original proposal here](https://github.com/WebAssembly/memory64) for more information.
     Wasm64,
-    /// A family of CISC instruction set architectures.
+    /// A family of CISC instruction set architectures, sometimes known as i686.
     X86,
     /// A 64-bit version of the X86 architecture, sometimes known as AMD64.
     X86_64,
@@ -53,6 +54,21 @@ impl Architecture {
 
 crate::enum_default!(Architecture, Unknown);
 
+impl Display for Architecture {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Unknown => "unknown",
+            Self::ARM => "arm",
+            Self::AArch64 => "aarch64",
+            Self::MIPS => "mips",
+            Self::Wasm32 => "wasm32",
+            Self::Wasm64 => "wasm64",
+            Self::X86 => "i686",
+            Self::X86_64 => "x86_64",
+        })
+    }
+}
+
 /// Describes the vendor of a target triple.
 #[derive(Copy, Clone, Debug)]
 #[non_exhaustive]
@@ -75,6 +91,15 @@ impl Vendor {
         } else {
             Self::Unknown
         }
+    }
+}
+
+impl Display for Vendor {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Unknown => "unknown",
+            Self::PC => "pc",
+        })
     }
 }
 
@@ -116,6 +141,20 @@ impl OperatingSystem {
 
 crate::enum_default!(OperatingSystem, Unknown);
 
+impl Display for OperatingSystem {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Unknown => "unknown",
+            Self::None => "none",
+            Self::IOS => "ios",
+            Self::Linux => "linux",
+            Self::MacOSX => "macosx", //"darwin",
+            Self::Windows => "windows",
+            Self::WASI => "wasi",
+        })
+    }
+}
+
 /// Additional information used to disambiguate targets.
 #[derive(Copy, Clone, Debug)]
 #[non_exhaustive]
@@ -154,6 +193,18 @@ impl Environment {
 }
 
 crate::enum_default!(Environment, Unknown);
+
+impl Display for Environment {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Unknown => "unknown",
+            Self::GNU => "gnu",
+            Self::MUSL => "musl",
+            Self::MSVC => "msvc",
+            Self::CoreCLR => "coreclr",
+        })
+    }
+}
 
 /// Represents a typical LLVM target triple.
 ///
@@ -224,6 +275,23 @@ impl KnownTriple {
     }
 }
 
+impl Display for KnownTriple {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "{}-{}-{}",
+            self.architecture(),
+            self.vendor(),
+            self.operating_system()
+        )?;
+
+        match self.environment() {
+            Environment::Unknown => Ok(()),
+            environment => write!(f, "-{}", environment),
+        }
+    }
+}
+
 /// An LLVM target triple, typically in the format `ARCHITECTURE-VENDOR-OPERATING_SYSTEM`.
 #[derive(Clone, Debug)]
 #[non_exhaustive]
@@ -243,6 +311,28 @@ impl std::default::Default for Triple {
     }
 }
 
+impl From<KnownTriple> for Triple {
+    fn from(triple: KnownTriple) -> Self {
+        Self::Known(triple)
+    }
+}
+
+impl Display for Triple {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        match self {
+            Self::Custom(triple) => Display::fmt(&triple, f),
+            Self::Known(triple) => Display::fmt(&triple, f),
+        }
+    }
+}
+
 pub mod layout;
 
 pub use layout::Layout;
+
+#[cfg(feature = "inkwell_interop")]
+impl From<Triple> for inkwell::targets::TargetTriple {
+    fn from(triple: Triple) -> Self {
+        Self::create(&triple.to_string())
+    }
+}

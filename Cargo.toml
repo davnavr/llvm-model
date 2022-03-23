@@ -15,4 +15,4 @@ inkwell = { git = "https://github.com/TheDan64/inkwell", rev = "c71d7ed", option
 
 [features]
 llvm_sys_interop = [ "llvm-sys" ]
-inkwell_interop = [ "inkwell" ]
+inkwell_interop = [ "inkwell", "llvm-sys" ]
