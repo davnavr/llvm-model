@@ -144,6 +144,7 @@ pub struct AlignmentPair {
 }
 
 impl AlignmentPair {
+    /// An ABI alignment value of 64 bits, with an omitted preferred alignment.
     pub const ALIGN_64_BITS: Self = Self::new(BitSize::SIZE_64);
 
     /// Creates a new alignment value, omitting the preferred alignment value.
@@ -208,6 +209,26 @@ impl PointerLayout {
         alignment: AlignmentPair::ALIGN_64_BITS,
         index_size: None,
     };
+
+    /// Retrieves the address space that this pointer layout applies to.
+    pub const fn address_space(&self) -> AddressSpace {
+        self.address_space
+    }
+
+    /// Gets the size of pointers, in bits.
+    pub const fn size(&self) -> BitSize {
+        self.size
+    }
+
+    /// Gets the alignment of pointers.
+    pub const fn alignment(&self) -> &AlignmentPair {
+        &self.alignment
+    }
+
+    /// Gets the index size, which defaults to the pointer size if it is unspecified.
+    pub fn index_size(&self) -> BitSize {
+        self.index_size.unwrap_or(self.size)
+    }
 }
 
 /// Describes the layout of pointers for a particular address space.
@@ -239,13 +260,13 @@ impl PointerLayoutMap {
     }
 
     /// Inserts a pointer layout for a particular address space.
-    pub fn insert(&mut self, layout: PointerLayout) -> Result<&PointerLayout, &PointerLayout> {
+    pub fn insert(&mut self, layout: PointerLayout) -> Result<&PointerLayout, PointerLayout> {
         if self.is_all_default() {
             Ok(&PointerLayout::LAYOUT_64_BIT)
         } else {
             match self.layouts.entry(layout.address_space) {
                 hash_map::Entry::Vacant(vacant) => Ok(vacant.insert(layout)),
-                hash_map::Entry::Occupied(occupied) => Err(occupied.get()),
+                hash_map::Entry::Occupied(occupied) => Err(occupied.get().clone()),
             }
         }
     }
@@ -315,13 +336,17 @@ impl PrimitiveAlignmentMap {
     }
 }
 
+/// Indicates the type of alignment used for function pointers.
 #[derive(Copy, Clone, Debug)]
 #[non_exhaustive]
 pub enum FunctionAlignmentType {
+    /// Indicates that the alignment of function pointers is independent of functions.
     Independent,
+    /// Indicates that the alignment of function pointers is a multiple of the alignment for functions.
     Multiple,
 }
 
+/// Describes the alignment of function pointers.
 #[derive(Clone, Debug)]
 pub struct FunctionAlignment {
     alignment_type: FunctionAlignmentType,
@@ -329,11 +354,22 @@ pub struct FunctionAlignment {
 }
 
 impl FunctionAlignment {
+    /// Creates a new function alignment value.
     pub const fn new(alignment_type: FunctionAlignmentType, abi_alignment: BitSize) -> Self {
         Self {
             alignment_type,
             abi_alignment,
         }
+    }
+
+    /// Gets a value indicating how function pointers are aligned.
+    pub const fn alignment_type(&self) -> FunctionAlignmentType {
+        self.alignment_type
+    }
+
+    /// The alignment for function pointers.
+    pub const fn abi_alignment(&self) -> BitSize {
+        self.abi_alignment
     }
 }
 
@@ -349,8 +385,11 @@ pub enum Mangling {
     MIPS,
     /// Apple's Mach object file format, which uses the prefix `L` for private symbols.
     MachO,
+    /// See LLVM documentation for more information.
     WindowsX86COFF,
+    /// Similar to [`Mangling::WindowsX86COFF`].
     WindowsCOFF,
+    /// A `L..` prefix is used for private symbols.
     XCOFF,
 }
 
@@ -368,11 +407,17 @@ pub struct Layout {
     pub global_address_space: AddressSpace,
     /// Specifies the address space used by the `alloca` instruction.
     pub alloca_address_space: AddressSpace,
+    /// Indicates the layout of pointers for certain address spaces.
     pub pointer_layouts: PointerLayoutMap,
+    /// Indicates how integers of certain sizes are aligned.
     pub integer_alignments: PrimitiveAlignmentMap,
+    /// Indicates how vectors of certain sizes are aligned.
     pub vector_alignments: PrimitiveAlignmentMap,
+    /// Indicates how floating-point types of certain sizes are aligned.
     pub float_alignments: PrimitiveAlignmentMap,
+    /// Specifies the alignment for aggregate types.
     pub aggregate_object_alignment: AlignmentPair,
+    /// Indicates how function pointers are aligned.
     pub function_pointer_alignment: Option<FunctionAlignment>,
     /// Specifies how symbol names are mangled in the output.
     pub mangling: Option<Mangling>,
