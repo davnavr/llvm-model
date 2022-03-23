@@ -23,49 +23,6 @@ impl Display for Endianness {
     }
 }
 
-/// Indicates the alignment of the stack, in bits.
-#[derive(Copy, Clone, Default, Eq, PartialEq, PartialOrd)]
-#[repr(transparent)]
-pub struct StackAlignment {
-    bytes: Option<NonZeroU8>,
-}
-
-impl StackAlignment {
-    /// Creates a stack alignment value from a size, in bytes.
-    pub const fn from_bytes(size: NonZeroU8) -> Self {
-        Self { bytes: Some(size) }
-    }
-
-    /// Gets the stack size, in bytes.
-    pub const fn bytes(self) -> Option<NonZeroU8> {
-        self.bytes
-    }
-
-    /// Gets the stack size, in bits.
-    pub fn bits(self) -> Option<NonZeroU16> {
-        self.bytes.map(|bytes| unsafe {
-            // Safety: bytes is guaranteed to not be zero.
-            NonZeroU16::new_unchecked(u16::from(bytes.get()) * 8)
-        })
-    }
-}
-
-impl Debug for StackAlignment {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        Display::fmt(&self.bits().map(NonZeroU16::get).unwrap_or_default(), f)
-    }
-}
-
-impl Display for StackAlignment {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        f.write_char('S')?;
-        if let Some(bit_size) = self.bits() {
-            Display::fmt(&bit_size, f)?;
-        }
-        Ok(())
-    }
-}
-
 /// An LLVM address space.
 #[derive(Copy, Clone, Debug, Default, Eq, Hash, PartialEq, PartialOrd)]
 #[repr(transparent)]
@@ -127,6 +84,10 @@ impl BitSize {
     pub fn bits(self) -> NonZeroU32 {
         self.bits
     }
+
+    fn unwrap_bits(size: Option<Self>) -> u32 {
+        size.map(|value| value.bits.get()).unwrap_or_default()
+    }
 }
 
 impl Debug for BitSize {
@@ -181,7 +142,7 @@ impl AlignmentPair {
 
     /// Gets the ABI alignment value, in bits.
     pub fn abi_alignment(&self) -> u32 {
-        self.abi.map(|size| size.bits().get()).unwrap_or_default()
+        BitSize::unwrap_bits(self.abi)
     }
 
     /// Gets the preferred alignment value in bits, defaulting to the ABI alignment if the former is omitted.
@@ -399,8 +360,8 @@ pub enum Mangling {
 pub struct Layout {
     /// Specifies the byte endianness of the target.
     pub endianness: Endianness,
-    /// Specifies the natual stack alignment in bits.
-    pub stack_alignment: StackAlignment,
+    /// Specifies the natual stack alignment.
+    pub stack_alignment: Option<BitSize>,
     /// Specifies which address space corresponds to program memory.
     pub program_address_space: AddressSpace,
     /// Specifies which address space corresponds to program memory.
@@ -430,7 +391,7 @@ impl Default for Layout {
     fn default() -> Self {
         Self {
             endianness: Endianness::Little,
-            stack_alignment: StackAlignment::default(),
+            stack_alignment: None,
             program_address_space: AddressSpace::VON_NEUMANN_DEFAULT,
             global_address_space: AddressSpace::VON_NEUMANN_DEFAULT,
             alloca_address_space: AddressSpace::VON_NEUMANN_DEFAULT,
