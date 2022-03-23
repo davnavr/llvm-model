@@ -7,6 +7,7 @@
 #![deny(missing_docs, missing_debug_implementations)]
 
 pub mod identifier;
+pub mod interop;
 pub mod module;
 pub mod target;
 

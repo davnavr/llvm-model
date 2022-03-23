@@ -492,22 +492,3 @@ impl Target {
         &self.layout
     }
 }
-
-#[cfg(feature = "inkwell_interop")]
-impl From<&'_ Triple> for inkwell::targets::TargetTriple {
-    fn from(triple: &Triple) -> Self {
-        Self::create(&triple.to_string())
-    }
-}
-
-#[cfg(feature = "inkwell_interop")]
-impl Triple {
-    /// Retrieves an inkwell Target structure corresponding to this target triple.
-    ///
-    /// Before calling, ensure that targets have been initialized beforehand, such as by calling [`inkwell::targets::Target::initialize_all()`],
-    pub fn to_inkwell_target(
-        &self,
-    ) -> Result<inkwell::targets::Target, inkwell::support::LLVMString> {
-        inkwell::targets::Target::from_triple(&self.into())
-    }
-}
