@@ -11,8 +11,10 @@ use std::ops::{Deref, DerefMut};
 
 /// Error type used when an identifier contains `null` bytes.
 #[derive(Debug, thiserror::Error)]
-#[error("identifiers must not contain null bytes")]
-pub struct Error;
+#[error("identifiers contains null byte at byte index {byte_index}")]
+pub struct Error {
+    byte_index: usize,
+}
 
 /// A borrowed identifier string.
 #[repr(transparent)]
@@ -29,6 +31,18 @@ impl Id {
         &*(identifier as *const str as *const Self)
     }
 
+    /// Creates a borrowed identifier from a borrowed string, checking for `null` bytes.
+    pub fn new(identifier: &str) -> Result<&Self, usize> {
+        if let Some((index, _)) = identifier.bytes().enumerate().find(|(_, c)| *c == 0u8) {
+            Err(index)
+        } else {
+            unsafe {
+                // Safety: Validation is performed above.
+                Ok(Self::new_unchecked(identifier))
+            }
+        }
+    }
+
     /// Copies the contents of this identifier into a C-compatible string.
     pub fn to_c_string(&self) -> CString {
         self.to_owned().into_c_string()
@@ -39,8 +53,8 @@ impl<'a> TryFrom<&'a str> for &'a Id {
     type Error = Error;
 
     fn try_from(identifier: &'a str) -> Result<Self, Self::Error> {
-        if identifier.bytes().any(|c| c == b'\0') {
-            Err(Error)
+        if let Some((byte_index, _)) = identifier.bytes().enumerate().find(|(_, c)| *c == 0u8) {
+            Err(Error { byte_index })
         } else {
             // Safety: Check for null bytes is performed earlier.
             Ok(unsafe { Id::new_unchecked(identifier) })

@@ -1,6 +1,6 @@
 //! LLVM target triple and layout information is used to describe the host that will run the code.
 
-use crate::identifier::{Id, Identifier};
+use crate::identifier::{self, Id, Identifier};
 use std::fmt::{Display, Formatter};
 
 /// The Instruction Set Architecture being targeted in a target triple.
@@ -273,6 +273,14 @@ impl KnownTriple {
     pub fn environment(&self) -> &Environment {
         &self.environment
     }
+
+    /// Returns the LLVM triple string for this target triple.
+    pub fn to_triple_string(&self) -> Identifier {
+        unsafe {
+            // Safety: Callers cannot create a custom triple here, so no null bytes exist.
+            Identifier::new_unchecked(self.to_string())
+        }
+    }
 }
 
 impl Display for KnownTriple {
@@ -302,6 +310,14 @@ pub enum Triple {
     Custom(Identifier),
     /// A target triple that is not custom.
     Known(KnownTriple),
+}
+
+impl Triple {
+    /// Returns the LLVM triple string for this target triple, returning an error if a custom triple string is used that contains
+    /// a null byte.
+    pub fn to_triple_string(&self) -> Result<Identifier, identifier::Error> {
+        Identifier::try_from(self.to_string())
+    }
 }
 
 impl std::default::Default for Triple {
