@@ -15,8 +15,14 @@ fn main() {
         Environment::MSVC,
     ))];
 
+    println!(
+        "Host: {}, {}",
+        inkwell::targets::TargetMachine::get_default_triple(),
+        inkwell::targets::TargetMachine::get_host_cpu_name()
+    );
+
     for triple in example_triples {
-        let target_triple = triple.to_inkwell_target();
+        let target_triple = triple.to_inkwell_target().unwrap();
 
         println!("{:?}", target_triple);
     }

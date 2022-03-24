@@ -3,7 +3,7 @@
 use crate::interop::inkwell::InkwellResult;
 use crate::target::Triple;
 
-pub use inkwell::targets::{Target as InkwellTarget, TargetTriple as InkwellTargetTriple};
+use inkwell::targets::{Target as InkwellTarget, TargetTriple as InkwellTargetTriple};
 
 impl From<&'_ Triple> for InkwellTargetTriple {
     fn from(triple: &Triple) -> Self {

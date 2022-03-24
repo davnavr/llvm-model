@@ -3,3 +3,6 @@
 
 #[cfg(feature = "inkwell_interop")]
 pub mod inkwell;
+
+#[cfg(feature = "llvm_sys_interop")]
+pub mod llvm_sys;
