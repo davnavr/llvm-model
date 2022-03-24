@@ -283,6 +283,88 @@ impl KnownTriple {
     }
 }
 
+/// Used when a known target triple could not be parsed correctly.
+///
+/// If you know for sure that your target triple is correct, consider using [`Triple::Known`] instead.
+#[derive(Clone, Debug, thiserror::Error)]
+#[error("{contents} is not a known target triple")]
+pub struct UnknownTripleError<'a> {
+    contents: &'a str,
+}
+
+impl<'a> std::convert::TryFrom<&'a Id> for KnownTriple {
+    type Error = UnknownTripleError<'a>;
+
+    /// Attempts to parse a known target triple from an identifier, expecting a triple in the format `ARCHITECTURE-VENDOR-OS` or
+    /// `ARCHITECTURE-VENDOR-OS-ENVIORNMENT`
+    fn try_from(triple: &'a Id) -> Result<Self, Self::Error> {
+        let mut identifiers = triple.split('-');
+
+        macro_rules! fail {
+            () => {
+                return Err(UnknownTripleError { contents: triple })
+            };
+        }
+
+        macro_rules! next_identifier {
+            () => {
+                if let Some(next) = identifiers.next() {
+                    next
+                } else {
+                    fail!()
+                }
+            };
+        }
+
+        let architecture = match next_identifier!() {
+            "aarch64" => Architecture::AArch64,
+            "mips" => Architecture::MIPS,
+            "wasm32" => Architecture::Wasm32,
+            "wasm64" => Architecture::Wasm64,
+            "i686" => Architecture::X86,
+            "x86_64" => Architecture::X86_64,
+            _ => fail!(),
+        };
+
+        let vendor = match next_identifier!() {
+            "unknown" => Vendor::Unknown,
+            "pc" => Vendor::PC,
+            _ => fail!(),
+        };
+
+        let operating_system = match next_identifier!() {
+            "unknown" => OperatingSystem::Unknown,
+            "none" => OperatingSystem::None,
+            "ios" => OperatingSystem::IOS,
+            "linux" => OperatingSystem::Linux,
+            "macosx" => OperatingSystem::MacOSX,
+            "wasi" => OperatingSystem::WASI,
+            "windows" => OperatingSystem::Windows,
+            _ => fail!(),
+        };
+
+        let environment = match identifiers.next() {
+            Some("unknown") | None => Environment::Unknown,
+            Some("gnu") => Environment::GNU,
+            Some("musl") => Environment::MUSL,
+            Some("msvc") => Environment::MSVC,
+            Some("coreclr") => Environment::CoreCLR,
+            Some(_) => fail!(),
+        };
+
+        if identifiers.next().is_some() {
+            fail!()
+        }
+
+        Ok(Self::with_environment(
+            architecture,
+            vendor,
+            operating_system,
+            environment,
+        ))
+    }
+}
+
 impl Display for KnownTriple {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
@@ -330,6 +412,24 @@ impl std::default::Default for Triple {
 impl From<KnownTriple> for Triple {
     fn from(triple: KnownTriple) -> Self {
         Self::Known(triple)
+    }
+}
+
+impl From<&'_ Id> for Triple {
+    fn from(triple: &Id) -> Self {
+        match KnownTriple::try_from(triple) {
+            Ok(known) => Self::Known(known),
+            Err(_) => Triple::Custom(triple.into()),
+        }
+    }
+}
+
+impl From<Identifier> for Triple {
+    fn from(triple: Identifier) -> Self {
+        match KnownTriple::try_from(triple.as_id()) {
+            Ok(known) => Self::Known(known),
+            Err(_) => Triple::Custom(triple),
+        }
     }
 }
 

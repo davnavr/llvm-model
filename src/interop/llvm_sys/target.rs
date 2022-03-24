@@ -26,6 +26,13 @@ pub unsafe fn identifier_to_target_ref(triple: &Id) -> interop::Result<LLVMTarge
     }
 }
 
+/// Gets a target triple corresponding to the host's machine.
+pub unsafe fn host_target_triple() -> target::Triple {
+    interop::Message::from_ptr(llvm_sys::target_machine::LLVMGetDefaultTargetTriple())
+        .to_identifier()
+        .into()
+}
+
 impl target::KnownTriple {
     /// Converts this target triple into the LLVM C API's represention for a target.
     pub unsafe fn to_target_ref(&self) -> interop::Result<LLVMTargetRef> {

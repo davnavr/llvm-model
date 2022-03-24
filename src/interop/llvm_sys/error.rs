@@ -1,5 +1,6 @@
 //! Contains code to handle LLVM error messages.
 
+use crate::identifier::Identifier;
 use std::ffi::CStr;
 use std::fmt::{Debug, Formatter};
 use std::os::raw::c_char;
@@ -17,7 +18,7 @@ impl Message {
     /// The `contents` pointer must be allocated by LLVM.
     ///
     /// # Panics
-    /// WIll panic if the `contents` pointer is `null`.
+    /// Will panic if the `contents` pointer is `null`.
     pub unsafe fn from_ptr(contents: *mut c_char) -> Self {
         Self {
             contents: std::ptr::NonNull::new(contents).expect("message contents must not be null"),
@@ -29,6 +30,14 @@ impl Message {
         unsafe {
             // Safety: Messages allocated by LLVM are assumed to be null terminated.
             CStr::from_ptr(self.contents.as_ptr())
+        }
+    }
+
+    /// Attempts to copy the contents of this LLVM message into an owned identifier.
+    pub fn to_identifier(&self) -> Identifier {
+        unsafe {
+            // Safety: The message is null terminated, so no interior nul bytes are possible.
+            Identifier::new_unchecked(self.to_string().expect("invalid UTF-8 in message"))
         }
     }
 

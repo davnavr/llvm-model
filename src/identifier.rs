@@ -47,6 +47,11 @@ impl Id {
     pub fn to_c_string(&self) -> CString {
         self.to_owned().into_c_string()
     }
+
+    /// Borrows the contents of this identifier as a UTF-8 string.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
 }
 
 impl<'a> TryFrom<&'a str> for &'a Id {
@@ -135,6 +140,21 @@ impl TryFrom<String> for Identifier {
     fn try_from(identifier: String) -> Result<Self, Self::Error> {
         <&Id>::try_from(identifier.as_str())?;
         Ok(Self(identifier))
+    }
+}
+
+impl From<&'_ Id> for Identifier {
+    fn from(identifier: &Id) -> Self {
+        unsafe {
+            // Safety: Id guarantees no nul bytes exist.
+            Self::new_unchecked(identifier.as_str().to_string())
+        }
+    }
+}
+
+impl From<Identifier> for String {
+    fn from(identifier: Identifier) -> String {
+        identifier.0
     }
 }
 
