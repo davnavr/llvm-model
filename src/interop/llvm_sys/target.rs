@@ -28,16 +28,6 @@ pub unsafe fn identifier_to_target_ref(triple: &identifier::Id) -> interop::Resu
     }
 }
 
-/// Gets a target triple corresponding to the host's machine.
-///
-/// # Safety
-/// Depends on global state, as it calls an LLVM function to determine the host's target triple.
-pub unsafe fn host_target_triple() -> target::Triple {
-    interop::Message::from_ptr(llvm_sys::target_machine::LLVMGetDefaultTargetTriple())
-        .to_identifier()
-        .into()
-}
-
 impl target::KnownTriple {
     /// Converts this target triple into the LLVM C API's represention for a target.
     ///
@@ -58,18 +48,35 @@ pub enum InvalidTargetError {
     Message(interop::Message),
 }
 
+impl From<identifier::Error> for InvalidTargetError {
+    fn from(error: identifier::Error) -> InvalidTargetError {
+        InvalidTargetError::InvalidIdentifier(error)
+    }
+}
+
+impl From<interop::Message> for InvalidTargetError {
+    fn from(message: interop::Message) -> InvalidTargetError {
+        InvalidTargetError::Message(message)
+    }
+}
+
 impl target::Triple {
     /// Converts the target triple to a LLVM C target reference, returning an error if a custom target contains null bytes.
-    /// 
+    ///
     /// # Safety
     /// See [`identifier_to_target_ref`].
     pub unsafe fn to_target_ref(&self) -> Result<LLVMTargetRef, InvalidTargetError> {
-        identifier_to_target_ref(
-            self.to_triple_string()
-                .map_err(InvalidTargetError::InvalidIdentifier)?
-                .as_id(),
-        )
-        .map_err(InvalidTargetError::Message)
+        Ok(identifier_to_target_ref(self.to_triple_string()?.as_id())?)
+    }
+
+    /// Gets a target triple corresponding to the host's machine.
+    ///
+    /// # Safety
+    /// Depends on global state, as it calls an LLVM function to determine the host's target triple.
+    pub unsafe fn host_machine() -> target::Triple {
+        interop::Message::from_ptr(llvm_sys::target_machine::LLVMGetDefaultTargetTriple())
+            .to_identifier()
+            .into()
     }
 }
 
@@ -157,13 +164,10 @@ impl target::Machine {
     /// # Safety
     /// This may depend on any global LLVM state.
     pub unsafe fn to_machine_ref(&self) -> Result<LLVMTargetMachineRef, InvalidTargetError> {
-        let target: LLVMTargetRef = self.target_triple().to_target_ref()?;
-
         Ok(llvm_sys::target_machine::LLVMCreateTargetMachine(
-            target,
+            self.target_triple().to_target_ref()?,
             self.target_triple()
-                .to_triple_string()
-                .map_err(InvalidTargetError::InvalidIdentifier)?
+                .to_triple_string()?
                 .into_c_string()
                 .as_ptr(),
             self.cpu_name().to_c_string().as_ptr(),
@@ -172,5 +176,26 @@ impl target::Machine {
             self.relocation_mode().into(),
             self.code_model().into(),
         ))
+    }
+
+    /// Gets the host's target machine.
+    ///
+    /// # Safety
+    /// May depend on global state.
+    pub unsafe fn host_machine(
+        optimization_level: target::CodeGenerationOptimization,
+        relocation_mode: target::RelocationMode,
+        code_model: target::CodeModel,
+    ) -> Self {
+        Self::new(
+            target::Triple::host_machine(),
+            interop::Message::from_ptr(llvm_sys::target_machine::LLVMGetHostCPUName())
+                .to_identifier(),
+            interop::Message::from_ptr(llvm_sys::target_machine::LLVMGetHostCPUFeatures())
+                .to_identifier(),
+            optimization_level,
+            relocation_mode,
+            code_model,
+        )
     }
 }
