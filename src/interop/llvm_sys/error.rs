@@ -25,6 +25,14 @@ impl Message {
         }
     }
 
+    /// Returns a pointer to the contents of the message.
+    ///
+    /// # Safety
+    /// Callers must ensure that the pointer is only used while the lifetime of the message is valid.
+    pub unsafe fn to_ptr(&self) -> *const c_char {
+        self.contents.as_ptr()
+    }
+
     /// Interprets the contents of this LLVM message as a C string.
     pub fn as_c_str(&self) -> &CStr {
         unsafe {
