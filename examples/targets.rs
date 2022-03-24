@@ -7,7 +7,7 @@ fn main() {
         llvm_sys::target::LLVM_InitializeAllTargetInfos();
 
         println!(
-            "{:?}",
+            "Current: {:?}",
             llvm_model::interop::llvm_sys::target::host_target_triple()
         );
     }
