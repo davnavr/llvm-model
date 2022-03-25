@@ -27,7 +27,7 @@ macro_rules! enum_default {
     };
 }
 
-/// Internal helper taht defiens a `From` trait implementation for an enum case.
+/// Internal helper that defines a `From` trait implementation for an enum case.
 #[doc(hidden)]
 #[macro_export]
 macro_rules! enum_case_from {

@@ -55,6 +55,8 @@ pub enum InvalidTripleError {
 crate::enum_case_from!(InvalidTripleError, InvalidIdentifier, identifier::Error);
 crate::enum_case_from!(InvalidTripleError, Message, interop::Message);
 
+// TODO: Create wrapper struct for Triples.
+
 impl target::Triple {
     /// Converts the target triple to a LLVM C target reference, returning an error if a custom target contains null bytes.
     ///
@@ -175,8 +177,25 @@ impl TargetMachine<'_> {
     }
 
     /// Gets the host's target machine.
-    pub fn host_machine() -> Result<Self, InvalidTripleError> {
-        todo!("host")
+    /// 
+    /// # Safety
+    /// May rely on global state.
+    pub unsafe fn host_machine(
+        optimization_level: target::CodeGenerationOptimization,
+        relocation_mode: target::RelocationMode,
+        code_model: target::CodeModel,
+    ) -> Result<Self, InvalidTripleError> {
+        target::Machine::new(
+            target::Triple::host_machine(),
+            interop::Message::from_ptr(llvm_sys::target_machine::LLVMGetHostCPUName())
+                .to_identifier(),
+                interop::Message::from_ptr(llvm_sys::target_machine::LLVMGetHostCPUFeatures())
+                .to_identifier(),
+            optimization_level,
+            relocation_mode,
+            code_model,
+        )
+        .try_into()
     }
 
     //pub unsafe fn from_reference
@@ -208,7 +227,6 @@ impl<'a> TryFrom<Cow<'a, target::Machine>> for TargetMachine<'a> {
     }
 }
 
-// TODO: Macro for TryFrom owned and borrowed
 impl TryFrom<target::Machine> for TargetMachine<'_> {
     type Error = InvalidTripleError;
 
@@ -317,8 +335,10 @@ impl TryFrom<&'_ TargetMachine<'_>> for TargetLayout<'_> {
 
 impl Drop for TargetLayout<'_> {
     fn drop(&mut self) {
-        unsafe { // Safety: Target layout reference is a valid pointer that was "owned" by self.
-            llvm_sys::target::LLVMDisposeTargetData(self.reference()) }
+        unsafe {
+            // Safety: Target layout reference is a valid pointer that was "owned" by self.
+            llvm_sys::target::LLVMDisposeTargetData(self.reference())
+        }
     }
 }
 

@@ -6,14 +6,14 @@ use crate::identifier::{Id, Identifier};
 use crate::target;
 
 /// An LLVM module, containing global values and their symbols.
-pub struct Module {
+pub struct Module<'t> {
     name: Identifier,
-    target: target::Target,
+    target: &'t target::Target,
 }
 
-impl Module {
+impl<'t> Module<'t> {
     /// Creates a new module with the specified name and target.
-    pub fn new(name: Identifier, target: target::Target) -> Self {
+    pub fn new(name: Identifier, target: &'t target::Target) -> Self {
         Self { name, target }
     }
 
@@ -23,27 +23,27 @@ impl Module {
     }
 
     /// Gets a value to describe the target machine and target layout for this module.
-    pub fn target(&self) -> &target::Target {
-        &self.target
+    pub fn target(&self) -> &'t target::Target {
+        self.target
     }
 
     /// Gets the target machine for this module.
-    pub fn target_machine(&self) -> &target::Machine {
+    pub fn target_machine(&self) -> &'t target::Machine {
         self.target.machine()
     }
 
     /// Gets the target triple of this module.
-    pub fn target_triple(&self) -> &target::Triple {
+    pub fn target_triple(&self) -> &'t target::Triple {
         self.target.triple()
     }
 
     /// Gets the target layout used by this module.
-    pub fn target_layout(&self) -> &target::Layout {
+    pub fn target_layout(&self) -> &'t target::Layout {
         self.target.layout()
     }
 }
 
-impl std::fmt::Debug for Module {
+impl std::fmt::Debug for Module<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         f.debug_struct("Module")
             .field("name", &self.name)
