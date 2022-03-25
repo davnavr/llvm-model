@@ -1,6 +1,6 @@
 //! Contains structures used to specify the layout of data for an LLVM target triple.
 
-use crate::identifier::{Identifier, Id};
+use crate::identifier::{Id, Identifier};
 use std::borrow::Cow;
 use std::collections::hash_map;
 use std::fmt::{Debug, Display, Formatter, Write as _};
@@ -151,7 +151,7 @@ impl AlignmentPair {
     pub fn preferred_alignment(&self) -> u32 {
         self.preferred
             .map(|size| size.bits().get())
-            .unwrap_or(self.abi_alignment())
+            .unwrap_or_else(|| self.abi_alignment())
     }
 }
 

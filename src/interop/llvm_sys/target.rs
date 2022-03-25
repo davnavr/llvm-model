@@ -45,22 +45,22 @@ impl target::KnownTriple {
 /// Error used when an attempt to convert from a target triple to an LLVM target reference failed.
 #[derive(Debug)]
 #[non_exhaustive]
-pub enum InvalidTargetError {
+pub enum InvalidTripleError {
     /// A custom target triple was used that contained interior `nul` bytes.
     InvalidIdentifier(identifier::Error),
     /// An LLVM message describing why the target is invalid.
     Message(interop::Message),
 }
 
-crate::enum_case_from!(InvalidTargetError, InvalidIdentifier, identifier::Error);
-crate::enum_case_from!(InvalidTargetError, Message, interop::Message);
+crate::enum_case_from!(InvalidTripleError, InvalidIdentifier, identifier::Error);
+crate::enum_case_from!(InvalidTripleError, Message, interop::Message);
 
 impl target::Triple {
     /// Converts the target triple to a LLVM C target reference, returning an error if a custom target contains null bytes.
     ///
     /// # Safety
     /// See [`identifier_to_target_ref`].
-    pub unsafe fn to_target_ref(&self) -> Result<LLVMTargetRef, InvalidTargetError> {
+    pub unsafe fn to_target_ref(&self) -> Result<LLVMTargetRef, InvalidTripleError> {
         Ok(identifier_to_target_ref(self.to_triple_string()?.as_id())?)
     }
 
@@ -154,35 +154,39 @@ impl From<target::CodeModel> for LLVMCodeModel {
 }
 
 /// Represents a target machine.
+#[derive(Debug)]
 pub struct TargetMachine<'a> {
-    triple: Cow<'a, target::Triple>,
     machine: Cow<'a, target::Machine>,
     reference: LLVMTargetMachineRef,
 }
 
 impl TargetMachine<'_> {
+    /// Information that describes this target machine.
     pub fn machine(&self) -> &target::Machine {
         &self.machine
     }
 
     /// A value used to refer to the target machine in the LLVM C APIs.
+    ///
+    /// # Safety
+    /// Callers must ensure that the reference is only used for the lifetime of `self`.
     pub unsafe fn reference(&self) -> LLVMTargetMachineRef {
         self.reference
     }
 
     /// Gets the host's target machine.
-    pub fn host_machine() -> Result<Self, InvalidTargetError> {
+    pub fn host_machine() -> Result<Self, InvalidTripleError> {
         todo!("host")
     }
+
+    //pub unsafe fn from_reference
 }
 
 impl<'a> TryFrom<Cow<'a, target::Machine>> for TargetMachine<'a> {
-    type Error = InvalidTargetError;
+    type Error = InvalidTripleError;
 
     fn try_from(target_machine: Cow<'a, target::Machine>) -> Result<Self, Self::Error> {
         Ok(Self {
-            machine: target_machine,
-            triple: Cow::Borrowed(target_machine.target_triple()),
             reference: unsafe {
                 // Safety: The Drop implementation disposes the target machine.
                 llvm_sys::target_machine::LLVMCreateTargetMachine(
@@ -199,12 +203,14 @@ impl<'a> TryFrom<Cow<'a, target::Machine>> for TargetMachine<'a> {
                     target_machine.code_model().into(),
                 )
             },
+            machine: target_machine,
         })
     }
 }
 
+// TODO: Macro for TryFrom owned and borrowed
 impl TryFrom<target::Machine> for TargetMachine<'_> {
-    type Error = InvalidTargetError;
+    type Error = InvalidTripleError;
 
     fn try_from(target_machine: target::Machine) -> Result<Self, Self::Error> {
         Self::try_from(Cow::Owned(target_machine))
@@ -212,7 +218,7 @@ impl TryFrom<target::Machine> for TargetMachine<'_> {
 }
 
 impl<'a> TryFrom<&'a target::Machine> for TargetMachine<'a> {
-    type Error = InvalidTargetError;
+    type Error = InvalidTripleError;
 
     fn try_from(target_machine: &'a target::Machine) -> Result<Self, Self::Error> {
         Self::try_from(Cow::Borrowed(target_machine))
@@ -225,43 +231,95 @@ impl Drop for TargetMachine<'_> {
     }
 }
 
+/// Error used when parsing a target data layout fails.
+pub type LayoutParseError = target::layout::ParseError<'static>;
+
+/// Error used when an attempt to convert from a reference to a target data layout fails.
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum InvalidLayoutError {
-    InvalidTarget(InvalidTargetError),
-    ParseError(target::layout::ParseError<'static>),
+    /// Indicates that a layout could not be created because of an invalid target triple.
+    InvalidTriple(InvalidTripleError),
+    /// Indicates that the layout could not be parsed.
+    ParseError(LayoutParseError),
 }
 
-crate::enum_case_from!(InvalidLayoutError, InvalidTarget, InvalidTargetError);
-crate::enum_case_from!(InvalidLayoutError, ParseError, target::layout::ParseError<'static>);
+crate::enum_case_from!(InvalidLayoutError, InvalidTriple, InvalidTripleError);
+crate::enum_case_from!(InvalidLayoutError, ParseError, LayoutParseError);
 
-impl target::Layout {
-    /// Creates a target layout from a data layout.
+/// Represents a target data layout.
+#[derive(Debug)]
+pub struct TargetLayout<'a> {
+    layout: Cow<'a, target::Layout>,
+    reference: LLVMTargetDataRef,
+}
+
+impl TargetLayout<'_> {
+    /// Description of the target layout.
+    pub fn layout(&self) -> &target::Layout {
+        &self.layout
+    }
+
+    /// A value used to refer to the target layout in the LLVM C APIs.
     ///
     /// # Safety
-    /// Callers must ensure that the target data layout is a valid pointer.
-    pub unsafe fn from_layout_ref(
+    /// Callers must ensure that the reference is only used for the lifetime of `self`.
+    pub unsafe fn reference(&self) -> LLVMTargetDataRef {
+        self.reference
+    }
+
+    /// Creates a target layout from a reference.
+    ///
+    /// # Safety
+    /// Callers must ensure that the target data layout is a valid pointer and are responsible for disposing of the reference
+    /// ONLY if an error is returned.
+    pub unsafe fn from_reference(
         target_layout: LLVMTargetDataRef,
-    ) -> Result<Self, target::layout::ParseError<'static>> {
-        interop::Message::from_ptr(llvm_sys::target::LLVMCopyStringRepOfTargetData(
-            target_layout,
-        ))
-        .to_identifier()
-        .try_into()
-    }
+    ) -> Result<Self, LayoutParseError> {
+        let parsed_layout = target::Layout::try_from(
+            interop::Message::from_ptr(llvm_sys::target::LLVMCopyStringRepOfTargetData(
+                target_layout,
+            ))
+            .to_identifier(),
+        )?;
 
-    /// Creates a target layout corresponding to a target machine.
-    pub fn from_machine_ref(
-        target_machine: &TargetMachine,
-    ) -> Result<Self, target::layout::ParseError<'static>> {
-        Self::from_layout_ref(llvm_sys::target_machine::LLVMCreateTargetDataLayout(
-            target_machine.reference(),
-        ))
-    }
-
-    pub unsafe fn host_machine() -> Result<Self, InvalidLayoutError> {
-        Ok(Self::from_machine_ref(&TargetMachine::host_machine()?)?)
+        Ok(Self {
+            layout: Cow::Owned(parsed_layout),
+            reference: target_layout,
+        })
     }
 }
 
-//impl target::Target { pub fn host_machine() -> Result<Self> {  } }
+impl TryFrom<&'_ TargetMachine<'_>> for TargetLayout<'_> {
+    type Error = LayoutParseError;
+
+    fn try_from(target_machine: &TargetMachine) -> Result<Self, Self::Error> {
+        unsafe {
+            // Safety: Target machine reference is only used for duration of this function call.
+            let machine_reference = target_machine.reference();
+            // Safety: Target machine reference is a valid pointer.
+            let layout_reference =
+                llvm_sys::target_machine::LLVMCreateTargetDataLayout(machine_reference);
+            // Safety: Target layout reference is a valid pointer, and disposal of reference on error is performed below.
+            let result = Self::from_reference(layout_reference);
+
+            if result.is_err() {
+                // Safety: Target layout reference is a valid pointer.
+                llvm_sys::target::LLVMDisposeTargetData(layout_reference);
+            }
+
+            result
+        }
+    }
+}
+
+//impl<'a> TryFrom<Cow<'a, target::Layout>> for TargetLayout<'a> { }
+
+impl Drop for TargetLayout<'_> {
+    fn drop(&mut self) {
+        unsafe { // Safety: Target layout reference is a valid pointer that was "owned" by self.
+            llvm_sys::target::LLVMDisposeTargetData(self.reference()) }
+    }
+}
+
+//pub struct Target
