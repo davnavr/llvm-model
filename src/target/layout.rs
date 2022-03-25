@@ -423,6 +423,8 @@ impl<'a> TryFrom<&'a Id> for Layout {
         let mut specifications = layout.split('-');
         let mut layout = Self::default();
 
+        dbg!(&mut specifications, &mut layout);
+
         todo!("parse specifications");
 
         Ok(layout)

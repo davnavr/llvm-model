@@ -16,30 +16,30 @@ pub use llvm_sys::{
 /// Converts a target triple string to the LLVM C API's representation for targets.
 ///
 /// # Safety
+/// Callers must ensure that they dispose of the returned target reference.
+///
 /// This function also depends on the initialization of targets LLVM can use by ensuring functions such
 /// as by calling [`llvm_sys::target::LLVM_InitializeAllTargets`] and [`llvm_sys::target::LLVM_InitializeAllTargetInfos`].
 pub unsafe fn identifier_to_target_ref(triple: &identifier::Id) -> interop::Result<LLVMTargetRef> {
     let mut error = ptr::null_mut();
     let mut target = ptr::null_mut();
-    if interop::is_true(llvm_sys::target_machine::LLVMGetTargetFromTriple(
+    if llvm_sys::target_machine::LLVMGetTargetFromTriple(
         triple.to_c_string().as_ptr(),
         &mut target as *mut LLVMTargetRef,
         &mut error as *mut *mut _,
-    )) {
+    ) == 0 {
         Ok(target)
     } else {
         Err(interop::Message::from_ptr(error))
     }
 }
 
-impl target::KnownTriple {
-    /// Converts this target triple into the LLVM C API's represention for a target.
-    ///
-    /// # Safety
-    /// See [`identifier_to_target_ref`].
-    pub unsafe fn to_target_ref(&self) -> interop::Result<LLVMTargetRef> {
-        identifier_to_target_ref(self.to_triple_string().as_id())
-    }
+/// An LLVM target triple.
+#[derive(Debug)]
+pub struct TargetTriple<'a> {
+    triple: Cow<'a, target::Triple>,
+    // No drop implementation, since a dispose function does not appear to exist for target triples.
+    reference: LLVMTargetRef,
 }
 
 /// Error used when an attempt to convert from a target triple to an LLVM target reference failed.
@@ -55,25 +55,51 @@ pub enum InvalidTripleError {
 crate::enum_case_from!(InvalidTripleError, InvalidIdentifier, identifier::Error);
 crate::enum_case_from!(InvalidTripleError, Message, interop::Message);
 
-// TODO: Create wrapper struct for Triples.
+impl<'a> TargetTriple<'a> {
+    /// Gets the target triple.
+    pub fn triple(&self) -> &target::Triple {
+        &self.triple
+    }
 
-impl target::Triple {
-    /// Converts the target triple to a LLVM C target reference, returning an error if a custom target contains null bytes.
+    /// Gets a reference to a value used to refer to the target triple in LLVM's C API.
+    ///
+    /// # Safety
+    /// Callers must ensure that the returned reference is only used for the lifetime of `self`.
+    pub unsafe fn reference(&self) -> LLVMTargetRef {
+        self.reference
+    }
+
+    /// Creates a well-known target triple for use with LLVM.
     ///
     /// # Safety
     /// See [`identifier_to_target_ref`].
-    pub unsafe fn to_target_ref(&self) -> Result<LLVMTargetRef, InvalidTripleError> {
-        Ok(identifier_to_target_ref(self.to_triple_string()?.as_id())?)
+    pub unsafe fn from_known(triple: target::KnownTriple) -> interop::Result<Self> {
+        Ok(Self {
+            reference: identifier_to_target_ref(triple.to_triple_string().as_id())?,
+            triple: Cow::Owned(target::Triple::Known(triple)),
+        })
+    }
+
+    /// Creates a target triple for use with LLVM.
+    ///
+    /// # Safety
+    /// See [`identifier_to_target_ref`].
+    pub unsafe fn new(triple: Cow<'a, target::Triple>) -> Result<Self, InvalidTripleError> {
+        Ok(Self {
+            reference: identifier_to_target_ref(triple.to_triple_string()?.as_id())?,
+            triple,
+        })
     }
 
     /// Gets a target triple corresponding to the host's machine.
     ///
     /// # Safety
-    /// Depends on global state, as it calls an LLVM function to determine the host's target triple.
-    pub unsafe fn host_machine() -> target::Triple {
-        interop::Message::from_ptr(llvm_sys::target_machine::LLVMGetDefaultTargetTriple())
-            .to_identifier()
-            .into()
+    /// See [`identifier_to_target_ref`].
+    pub unsafe fn host_machine() -> Result<Self, InvalidTripleError> {
+        Self::new(
+            Cow::Owned(target::Triple::from(interop::Message::from_ptr(llvm_sys::target_machine::LLVMGetDefaultTargetTriple())
+                .to_identifier())),
+        )
     }
 }
 
@@ -177,7 +203,7 @@ impl TargetMachine<'_> {
     }
 
     /// Gets the host's target machine.
-    /// 
+    ///
     /// # Safety
     /// May rely on global state.
     pub unsafe fn host_machine(
@@ -185,17 +211,36 @@ impl TargetMachine<'_> {
         relocation_mode: target::RelocationMode,
         code_model: target::CodeModel,
     ) -> Result<Self, InvalidTripleError> {
-        target::Machine::new(
-            target::Triple::host_machine(),
-            interop::Message::from_ptr(llvm_sys::target_machine::LLVMGetHostCPUName())
-                .to_identifier(),
-                interop::Message::from_ptr(llvm_sys::target_machine::LLVMGetHostCPUFeatures())
-                .to_identifier(),
-            optimization_level,
-            relocation_mode,
-            code_model,
-        )
-        .try_into()
+        let host_triple = TargetTriple::host_machine()?;
+        let cpu_name = interop::Message::from_ptr(llvm_sys::target_machine::LLVMGetHostCPUName());
+        let features =
+            interop::Message::from_ptr(llvm_sys::target_machine::LLVMGetHostCPUFeatures());
+
+        Ok(Self {
+            reference:
+                // Safety: The Drop implementation disposes the target machine.
+                llvm_sys::target_machine::LLVMCreateTargetMachine(
+                    host_triple.reference(),
+                    host_triple
+                        .triple()
+                        .to_triple_string()?
+                        .into_c_string()
+                        .as_ptr(),
+                    cpu_name.to_ptr(),
+                    features.to_ptr(),
+                    optimization_level.into(),
+                    relocation_mode.into(),
+                    code_model.into(),
+                ),
+            machine: Cow::Owned(target::Machine::new(
+                host_triple.triple().clone(),
+                cpu_name.to_identifier(),
+                features.to_identifier(),
+                optimization_level,
+                relocation_mode,
+                code_model,
+            )),
+        })
     }
 
     //pub unsafe fn from_reference
@@ -207,11 +252,13 @@ impl<'a> TryFrom<Cow<'a, target::Machine>> for TargetMachine<'a> {
     fn try_from(target_machine: Cow<'a, target::Machine>) -> Result<Self, Self::Error> {
         Ok(Self {
             reference: unsafe {
+                let target_triple = TargetTriple::new(Cow::Borrowed(target_machine.target_triple()))?;
+
                 // Safety: The Drop implementation disposes the target machine.
                 llvm_sys::target_machine::LLVMCreateTargetMachine(
-                    target_machine.target_triple().to_target_ref()?,
-                    target_machine
-                        .target_triple()
+                    target_triple.reference(),
+                    target_triple
+                        .triple()
                         .to_triple_string()?
                         .into_c_string()
                         .as_ptr(),
