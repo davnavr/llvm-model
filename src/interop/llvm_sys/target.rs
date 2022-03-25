@@ -3,16 +3,20 @@
 use crate::identifier;
 use crate::interop::llvm_sys as interop;
 use crate::target;
+use std::borrow::Cow;
 use std::ptr;
 
-pub use llvm_sys::target_machine::{
-    LLVMCodeGenOptLevel, LLVMCodeModel, LLVMRelocMode, LLVMTargetMachineRef, LLVMTargetRef,
+pub use llvm_sys::{
+    target::LLVMTargetDataRef,
+    target_machine::{
+        LLVMCodeGenOptLevel, LLVMCodeModel, LLVMRelocMode, LLVMTargetMachineRef, LLVMTargetRef,
+    },
 };
 
 /// Converts a target triple string to the LLVM C API's representation for targets.
 ///
 /// # Safety
-/// This function might depend on global state, such as the initialization of targets LLVM can use by ensuring functions such
+/// This function also depends on the initialization of targets LLVM can use by ensuring functions such
 /// as by calling [`llvm_sys::target::LLVM_InitializeAllTargets`] and [`llvm_sys::target::LLVM_InitializeAllTargetInfos`].
 pub unsafe fn identifier_to_target_ref(triple: &identifier::Id) -> interop::Result<LLVMTargetRef> {
     let mut error = ptr::null_mut();
@@ -48,17 +52,8 @@ pub enum InvalidTargetError {
     Message(interop::Message),
 }
 
-impl From<identifier::Error> for InvalidTargetError {
-    fn from(error: identifier::Error) -> InvalidTargetError {
-        InvalidTargetError::InvalidIdentifier(error)
-    }
-}
-
-impl From<interop::Message> for InvalidTargetError {
-    fn from(message: interop::Message) -> InvalidTargetError {
-        InvalidTargetError::Message(message)
-    }
-}
+crate::enum_case_from!(InvalidTargetError, InvalidIdentifier, identifier::Error);
+crate::enum_case_from!(InvalidTargetError, Message, interop::Message);
 
 impl target::Triple {
     /// Converts the target triple to a LLVM C target reference, returning an error if a custom target contains null bytes.
@@ -158,44 +153,115 @@ impl From<target::CodeModel> for LLVMCodeModel {
     }
 }
 
-impl target::Machine {
-    /// Attempts to convert from a target machine to a reference using the LLVM C APIs.
-    ///
-    /// # Safety
-    /// This may depend on any global LLVM state.
-    pub unsafe fn to_machine_ref(&self) -> Result<LLVMTargetMachineRef, InvalidTargetError> {
-        Ok(llvm_sys::target_machine::LLVMCreateTargetMachine(
-            self.target_triple().to_target_ref()?,
-            self.target_triple()
-                .to_triple_string()?
-                .into_c_string()
-                .as_ptr(),
-            self.cpu_name().to_c_string().as_ptr(),
-            self.features().to_c_string().as_ptr(),
-            self.code_generation_optimization_level().into(),
-            self.relocation_mode().into(),
-            self.code_model().into(),
-        ))
+/// Represents a target machine.
+pub struct TargetMachine<'a> {
+    triple: Cow<'a, target::Triple>,
+    machine: Cow<'a, target::Machine>,
+    reference: LLVMTargetMachineRef,
+}
+
+impl TargetMachine<'_> {
+    pub fn machine(&self) -> &target::Machine {
+        &self.machine
+    }
+
+    /// A value used to refer to the target machine in the LLVM C APIs.
+    pub unsafe fn reference(&self) -> LLVMTargetMachineRef {
+        self.reference
     }
 
     /// Gets the host's target machine.
-    ///
-    /// # Safety
-    /// May depend on global state.
-    pub unsafe fn host_machine(
-        optimization_level: target::CodeGenerationOptimization,
-        relocation_mode: target::RelocationMode,
-        code_model: target::CodeModel,
-    ) -> Self {
-        Self::new(
-            target::Triple::host_machine(),
-            interop::Message::from_ptr(llvm_sys::target_machine::LLVMGetHostCPUName())
-                .to_identifier(),
-            interop::Message::from_ptr(llvm_sys::target_machine::LLVMGetHostCPUFeatures())
-                .to_identifier(),
-            optimization_level,
-            relocation_mode,
-            code_model,
-        )
+    pub fn host_machine() -> Result<Self, InvalidTargetError> {
+        todo!("host")
     }
 }
+
+impl<'a> TryFrom<Cow<'a, target::Machine>> for TargetMachine<'a> {
+    type Error = InvalidTargetError;
+
+    fn try_from(target_machine: Cow<'a, target::Machine>) -> Result<Self, Self::Error> {
+        Ok(Self {
+            machine: target_machine,
+            triple: Cow::Borrowed(target_machine.target_triple()),
+            reference: unsafe {
+                // Safety: The Drop implementation disposes the target machine.
+                llvm_sys::target_machine::LLVMCreateTargetMachine(
+                    target_machine.target_triple().to_target_ref()?,
+                    target_machine
+                        .target_triple()
+                        .to_triple_string()?
+                        .into_c_string()
+                        .as_ptr(),
+                    target_machine.cpu_name().to_c_string().as_ptr(),
+                    target_machine.features().to_c_string().as_ptr(),
+                    target_machine.code_generation_optimization_level().into(),
+                    target_machine.relocation_mode().into(),
+                    target_machine.code_model().into(),
+                )
+            },
+        })
+    }
+}
+
+impl TryFrom<target::Machine> for TargetMachine<'_> {
+    type Error = InvalidTargetError;
+
+    fn try_from(target_machine: target::Machine) -> Result<Self, Self::Error> {
+        Self::try_from(Cow::Owned(target_machine))
+    }
+}
+
+impl<'a> TryFrom<&'a target::Machine> for TargetMachine<'a> {
+    type Error = InvalidTargetError;
+
+    fn try_from(target_machine: &'a target::Machine) -> Result<Self, Self::Error> {
+        Self::try_from(Cow::Borrowed(target_machine))
+    }
+}
+
+impl Drop for TargetMachine<'_> {
+    fn drop(&mut self) {
+        unsafe { llvm_sys::target_machine::LLVMDisposeTargetMachine(self.reference) }
+    }
+}
+
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum InvalidLayoutError {
+    InvalidTarget(InvalidTargetError),
+    ParseError(target::layout::ParseError<'static>),
+}
+
+crate::enum_case_from!(InvalidLayoutError, InvalidTarget, InvalidTargetError);
+crate::enum_case_from!(InvalidLayoutError, ParseError, target::layout::ParseError<'static>);
+
+impl target::Layout {
+    /// Creates a target layout from a data layout.
+    ///
+    /// # Safety
+    /// Callers must ensure that the target data layout is a valid pointer.
+    pub unsafe fn from_layout_ref(
+        target_layout: LLVMTargetDataRef,
+    ) -> Result<Self, target::layout::ParseError<'static>> {
+        interop::Message::from_ptr(llvm_sys::target::LLVMCopyStringRepOfTargetData(
+            target_layout,
+        ))
+        .to_identifier()
+        .try_into()
+    }
+
+    /// Creates a target layout corresponding to a target machine.
+    pub fn from_machine_ref(
+        target_machine: &TargetMachine,
+    ) -> Result<Self, target::layout::ParseError<'static>> {
+        Self::from_layout_ref(llvm_sys::target_machine::LLVMCreateTargetDataLayout(
+            target_machine.reference(),
+        ))
+    }
+
+    pub unsafe fn host_machine() -> Result<Self, InvalidLayoutError> {
+        Ok(Self::from_machine_ref(&TargetMachine::host_machine()?)?)
+    }
+}
+
+//impl target::Target { pub fn host_machine() -> Result<Self> {  } }

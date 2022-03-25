@@ -1,5 +1,7 @@
 //! Contains structures used to specify the layout of data for an LLVM target triple.
 
+use crate::identifier::{Identifier, Id};
+use std::borrow::Cow;
 use std::collections::hash_map;
 use std::fmt::{Debug, Display, Formatter, Write as _};
 use std::num::{NonZeroU32, NonZeroU8};
@@ -404,5 +406,35 @@ impl Default for Layout {
             mangling: None,
             native_integer_widths: Vec::default(),
         }
+    }
+}
+
+/// Error used when a layout could not be parsed.
+#[derive(Clone, Debug, thiserror::Error)]
+#[error("{message}")]
+pub struct ParseError<'a> {
+    message: Cow<'a, str>,
+}
+
+impl<'a> TryFrom<&'a Id> for Layout {
+    type Error = ParseError<'a>;
+
+    fn try_from(layout: &'a Id) -> Result<Self, Self::Error> {
+        let mut specifications = layout.split('-');
+        let mut layout = Self::default();
+
+        todo!("parse specifications");
+
+        Ok(layout)
+    }
+}
+
+impl TryFrom<Identifier> for Layout {
+    type Error = ParseError<'static>;
+
+    fn try_from(layout: Identifier) -> Result<Self, Self::Error> {
+        Self::try_from(layout.as_id()).map_err(|error| ParseError {
+            message: Cow::Owned(error.message.into_owned()),
+        })
     }
 }

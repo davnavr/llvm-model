@@ -26,3 +26,16 @@ macro_rules! enum_default {
         }
     };
 }
+
+/// Internal helper taht defiens a `From` trait implementation for an enum case.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! enum_case_from {
+    ($enum_type: ty, $enum_case: ident, $case_type: ty) => {
+        impl std::convert::From<$case_type> for $enum_type {
+            fn from(value: $case_type) -> Self {
+                Self::$enum_case(value)
+            }
+        }
+    };
+}
