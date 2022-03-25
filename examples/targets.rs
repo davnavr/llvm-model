@@ -7,6 +7,7 @@ fn main() {
     unsafe {
         llvm_sys::target::LLVM_InitializeAllTargets();
         llvm_sys::target::LLVM_InitializeAllTargetInfos();
+        llvm_sys::target::LLVM_InitializeNativeTarget();
 
         println!(
             "Current: {:?}",

@@ -27,7 +27,8 @@ pub unsafe fn identifier_to_target_ref(triple: &identifier::Id) -> interop::Resu
         triple.to_c_string().as_ptr(),
         &mut target as *mut LLVMTargetRef,
         &mut error as *mut *mut _,
-    ) == 0 {
+    ) == 0
+    {
         Ok(target)
     } else {
         Err(interop::Message::from_ptr(error))
@@ -96,10 +97,10 @@ impl<'a> TargetTriple<'a> {
     /// # Safety
     /// See [`identifier_to_target_ref`].
     pub unsafe fn host_machine() -> Result<Self, InvalidTripleError> {
-        Self::new(
-            Cow::Owned(target::Triple::from(interop::Message::from_ptr(llvm_sys::target_machine::LLVMGetDefaultTargetTriple())
-                .to_identifier())),
-        )
+        Self::new(Cow::Owned(target::Triple::from(
+            interop::Message::from_ptr(llvm_sys::target_machine::LLVMGetDefaultTargetTriple())
+                .to_identifier(),
+        )))
     }
 }
 
@@ -205,7 +206,8 @@ impl TargetMachine<'_> {
     /// Gets the host's target machine.
     ///
     /// # Safety
-    /// May rely on global state.
+    /// Relies on the initialization of target information for the host machine, such as with
+    /// [`llvm_sys::target::LLVM_InitializeNativeTarget`].
     pub unsafe fn host_machine(
         optimization_level: target::CodeGenerationOptimization,
         relocation_mode: target::RelocationMode,
@@ -252,7 +254,8 @@ impl<'a> TryFrom<Cow<'a, target::Machine>> for TargetMachine<'a> {
     fn try_from(target_machine: Cow<'a, target::Machine>) -> Result<Self, Self::Error> {
         Ok(Self {
             reference: unsafe {
-                let target_triple = TargetTriple::new(Cow::Borrowed(target_machine.target_triple()))?;
+                let target_triple =
+                    TargetTriple::new(Cow::Borrowed(target_machine.target_triple()))?;
 
                 // Safety: The Drop implementation disposes the target machine.
                 llvm_sys::target_machine::LLVMCreateTargetMachine(
