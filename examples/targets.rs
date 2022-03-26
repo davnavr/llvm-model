@@ -13,13 +13,14 @@ fn main() {
             target::CodeGenerationOptimization::Default,
             target::RelocationMode::Default,
             target::CodeModel::Default,
-        ).unwrap();
+        )
+        .unwrap();
+
+        println!("Current: {:?}", &host_machine,);
 
         println!(
-            "Current: {:?}",
-            &host_machine,
+            "Current Layout {:?}",
+            interop::llvm_sys::target::TargetLayout::try_from(&host_machine)
         );
-
-        println!("Current Layout {:?}", interop::llvm_sys::target::TargetLayout::try_from(&host_machine));
     }
 }

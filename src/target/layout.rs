@@ -233,7 +233,7 @@ impl PointerLayoutMap {
     }
 
     /// Gets the pointer layout used for the given address space.
-    /// 
+    ///
     /// Prefer using `PointerLayoutMap::get_or_default` for determining the pointer layout for a given address space.
     pub fn get(&self, address_space: AddressSpace) -> Option<&PointerLayout> {
         self.layouts.get(&address_space)
@@ -241,7 +241,8 @@ impl PointerLayoutMap {
 
     /// Gets the pointer layout used for a given address space, returning the default layout value if it is not specified.
     pub fn get_or_default(&self, address_space: AddressSpace) -> &PointerLayout {
-        self.get(address_space).unwrap_or(&PointerLayout::LAYOUT_64_BIT)
+        self.get(address_space)
+            .unwrap_or(&PointerLayout::LAYOUT_64_BIT)
     }
 }
 
@@ -443,6 +444,12 @@ pub enum ParseError {
     /// Used when a non-zero size was expected in a particular specification.
     #[error("expected non-zero size value in specification {0}")]
     ExpectedNonZeroSize(char),
+    /// Used when an `m` specification exists that did not specify any option.
+    #[error("a mangling specification exists but did not specify any option")]
+    MissingManglingValue,
+    /// Used when an `m` specification uses an invalid option.
+    #[error("{0} is not a valid mangling specification option")]
+    InvalidManglingValue(char),
     /// Used when a specification string is empty.
     #[error("specifications must not be empty")]
     EmptySpecification,
@@ -488,18 +495,29 @@ impl TryFrom<&Id> for Layout {
             Ok((remaining, AddressSpace(value)))
         }
 
-        fn parse_information<T, P: FnOnce(&[char]) -> ParseResult<T>>(parser: P, s: &[char]) -> ParseResult<Option<T>> {
+        fn parse_information<T, P: FnOnce(&[char]) -> ParseResult<T>>(
+            parser: P,
+            s: &[char],
+        ) -> ParseResult<Option<T>> {
             match s.first() {
                 Some(':') => {
                     let (remaining, value) = parser(&s[1..])?;
                     Ok((remaining, Some(value)))
-                },
+                }
                 Some(_) => Err(ParseError::ExpectedEnd(s.iter().skip(1).collect())),
-                None => Ok((&[], None))
+                None => Ok((&[], None)),
             }
         }
 
-        fn parse_information_or<T, P: FnOnce(&[char]) -> ParseResult<T>, E: FnOnce() -> ParseError>(parser: P, error: E, s: &[char]) -> ParseResult<T> {
+        fn parse_information_or<
+            T,
+            P: FnOnce(&[char]) -> ParseResult<T>,
+            E: FnOnce() -> ParseError,
+        >(
+            parser: P,
+            error: E,
+            s: &[char],
+        ) -> ParseResult<T> {
             match parse_information(parser, s)? {
                 (remaining, Some(value)) => Ok((remaining, value)),
                 (_, None) => Err(error()),
@@ -543,8 +561,16 @@ impl TryFrom<&Id> for Layout {
                             _ => return Err(ParseError::MissingInformation),
                         };
 
-                        let (remaining, size) = parse_information_or(parse_bit_size, || ParseError::MissingInformation, remaining)?;
-                        let (remaining, abi) = parse_information_or(parse_bit_size, || ParseError::MissingInformation, remaining)?;
+                        let (remaining, size) = parse_information_or(
+                            parse_bit_size,
+                            || ParseError::MissingInformation,
+                            remaining,
+                        )?;
+                        let (remaining, abi) = parse_information_or(
+                            parse_bit_size,
+                            || ParseError::MissingInformation,
+                            remaining,
+                        )?;
                         let (remaining, pref) = parse_information(parse_bit_size, remaining)?;
                         let (remaining, idx) = parse_information(parse_bit_size, remaining)?;
 
@@ -558,8 +584,43 @@ impl TryFrom<&Id> for Layout {
                             index_size: idx.flatten(),
                         }) {
                             Ok(_) => remaining,
-                            Err(_) => return Err(ParseError::DuplicatePointerLayout(address_space)),
+                            Err(_) => {
+                                return Err(ParseError::DuplicatePointerLayout(address_space))
+                            }
                         }
+                    }
+                    //'i'
+                    //'v'
+                    //'f'
+                    //'a'
+                    //'F'
+                    'm' => {
+                        let (remaining, mangling) = parse_information_or(
+                            |s| {
+                                if let Some(mangling_option) = s.first() {
+                                    let remaining = &s[1..];
+                                    match mangling_option {
+                                        'e' => Ok((remaining, Mangling::ELF)),
+                                        'l' => Ok((remaining, Mangling::GOFF)),
+                                        'm' => Ok((remaining, Mangling::MIPS)),
+                                        'o' => Ok((remaining, Mangling::MachO)),
+                                        'x' => Ok((remaining, Mangling::WindowsX86COFF)),
+                                        'w' => Ok((remaining, Mangling::WindowsCOFF)),
+                                        'a' => Ok((remaining, Mangling::XCOFF)),
+                                        _ => {
+                                            Err(ParseError::InvalidManglingValue(*mangling_option))
+                                        }
+                                    }
+                                } else {
+                                    Err(ParseError::MissingManglingValue)
+                                }
+                            },
+                            || ParseError::MissingManglingValue,
+                            information,
+                        )?;
+
+                        layout.mangling = Some(mangling);
+                        remaining
                     }
                     _ => return Err(ParseError::InvalidSpecification(*kind)),
                 };
