@@ -427,7 +427,7 @@ impl Default for Layout {
 #[non_exhaustive]
 pub enum ParseError {
     /// Used when an unknown specification was parsed.
-    #[error("{0} is not a valid specification")]
+    #[error("'{0}' is not a valid specification")]
     InvalidSpecification(char),
     /// Used when an integer could not be parsed.
     #[error(transparent)]
@@ -436,13 +436,13 @@ pub enum ParseError {
     #[error("missing information after colon")]
     MissingInformation,
     /// Used when remaining characters in a specification could not be parsed.
-    #[error("expected end of specification, but got {0}")]
+    #[error("expected end, but got {0}")]
     ExpectedEnd(String),
     /// Used when more than one `p` specification for a particular address space.
     #[error("duplicate pointer layout specified for address space {0:?}")]
     DuplicatePointerLayout(AddressSpace),
     /// Used when a non-zero size was expected in a particular specification.
-    #[error("expected non-zero size value in specification {0}")]
+    #[error("expected non-zero size value in specification '{0}'")]
     ExpectedNonZeroSize(char),
     /// Used when an `m` specification exists that did not specify any option.
     #[error("a mangling specification exists but did not specify any option")]
@@ -472,7 +472,7 @@ impl TryFrom<&Id> for Layout {
             let mut digits = String::new();
             let mut parse_count = 0;
 
-            for d in s.iter().filter(|c| c.is_ascii_digit()) {
+            for d in s.iter().take_while(|c| c.is_ascii_digit()) {
                 digits.push(*d);
                 parse_count += 1;
             }
