@@ -302,19 +302,6 @@ impl Drop for TargetMachine<'_> {
 /// Error used when parsing a target data layout fails.
 pub type LayoutParseError = target::layout::ParseError;
 
-/// Error used when an attempt to convert from a reference to a target data layout fails.
-#[derive(Debug)]
-#[non_exhaustive]
-pub enum InvalidLayoutError {
-    /// Indicates that a layout could not be created because of an invalid target triple.
-    InvalidTriple(InvalidTripleError),
-    /// Indicates that the layout could not be parsed.
-    ParseError(LayoutParseError),
-}
-
-crate::enum_case_from!(InvalidLayoutError, InvalidTriple, InvalidTripleError);
-crate::enum_case_from!(InvalidLayoutError, ParseError, LayoutParseError);
-
 /// Represents a target data layout.
 #[derive(Debug)]
 pub struct TargetLayout {
@@ -389,6 +376,37 @@ impl Drop for TargetLayout {
             llvm_sys::target::LLVMDisposeTargetData(self.reference())
         }
     }
+}
+
+/// Error used when creation of a target fails.
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum InvalidTargetError {
+    /// Used when an attempt to create a target failed to an invalid target triple.
+    InvalidTriple(InvalidTripleError),
+    /// Used when a target's data layout could not be parsed.s
+    InvalidLayout(LayoutParseError),
+}
+
+crate::enum_case_from!(InvalidTargetError, InvalidTriple, InvalidTripleError);
+crate::enum_case_from!(InvalidTargetError, InvalidLayout, LayoutParseError);
+
+/// Gets a target for the host machine.
+///
+/// # Safety
+/// See [`TargetMachine::host_machine`].
+pub unsafe fn host_machine_target(
+    optimization_level: target::CodeGenerationOptimization,
+    relocation_mode: target::RelocationMode,
+    code_model: target::CodeModel,
+) -> Result<target::Target, InvalidTargetError> {
+    let host_machine =
+        TargetMachine::host_machine(optimization_level, relocation_mode, code_model)?;
+    let host_layout = TargetLayout::try_from(&host_machine)?;
+    Ok(target::Target::new(
+        host_machine.machine().clone(),
+        host_layout.layout().clone(),
+    ))
 }
 
 //pub struct Target
