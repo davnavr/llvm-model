@@ -143,7 +143,16 @@ impl TryFrom<String> for Identifier {
     }
 }
 
-impl From<&'_ Id> for Identifier {
+impl TryFrom<&str> for Identifier {
+    type Error = Error;
+
+    fn try_from(identifier: &str) -> Result<Self, Self::Error> {
+        <&Id>::try_from(identifier)?;
+        Ok(Self(identifier.to_string()))
+    }
+}
+
+impl From<&Id> for Identifier {
     fn from(identifier: &Id) -> Self {
         unsafe {
             // Safety: Id guarantees no nul bytes exist.

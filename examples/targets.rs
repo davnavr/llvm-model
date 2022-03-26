@@ -2,7 +2,7 @@
 ///
 /// An example is used instead of test functions since LLVM initialization functions probably shouldn't be called more than once.
 fn main() {
-    use llvm_model::{interop, target};
+    use llvm_model::{interop, target, Identifier};
 
     let host_target = unsafe {
         llvm_sys::target::LLVM_InitializeAllTargets();
@@ -17,5 +17,10 @@ fn main() {
         .unwrap()
     };
 
-    println!("Current: {:?}", &host_target);
+    let module = llvm_model::Module::new(
+        Identifier::try_from("target_example").unwrap(),
+        &host_target,
+    );
+
+    println!("{}", &module);
 }

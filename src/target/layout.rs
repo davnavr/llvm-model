@@ -35,6 +35,12 @@ impl AddressSpace {
     pub const VON_NEUMANN_DEFAULT: Self = Self(0);
 }
 
+impl Display for AddressSpace {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        Display::fmt(&self.0, f)
+    }
+}
+
 /// Specifies the size of an integer or pointer, in bits.
 #[derive(Copy, Clone, Eq, Hash, PartialEq, PartialOrd)]
 #[repr(transparent)]
@@ -336,6 +342,15 @@ pub enum FunctionAlignmentType {
     Multiple,
 }
 
+impl Display for FunctionAlignmentType {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        f.write_char(match self {
+            Self::Independent => 'i',
+            Self::Multiple => 'n',
+        })
+    }
+}
+
 /// Describes the alignment of function pointers.
 #[derive(Clone, Debug)]
 pub struct FunctionAlignment {
@@ -456,7 +471,7 @@ pub enum ParseError {
     #[error("expected end, but got {0}")]
     ExpectedEnd(String),
     /// Used when more than one `p` specification for a particular address space.
-    #[error("duplicate pointer layout specified for address space {0:?}")]
+    #[error("duplicate pointer layout specified for address space {0}")]
     DuplicatePointerLayout(AddressSpace),
     /// Used when a non-zero size was expected in a particular specification.
     #[error("expected non-zero size value in specification '{0}'")]
@@ -741,5 +756,114 @@ impl TryFrom<Identifier> for Layout {
 
     fn try_from(layout: Identifier) -> Result<Self, Self::Error> {
         Self::try_from(layout.as_id())
+    }
+}
+
+impl Display for Layout {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        let mut specifications: Vec<String> = Vec::new();
+
+        specifications.push(self.endianness.to_string());
+
+        macro_rules! write_specification {
+            ($dst: expr, $($arg:tt)*) => {
+                specifications.push({
+                    let mut buffer = String::new();
+                    write!(&mut buffer, $dst, $($arg)*)?;
+                    buffer
+                });
+            };
+        }
+
+        write_specification!("S{}", BitSize::unwrap_bits(self.stack_alignment));
+        write_specification!("P{}", self.program_address_space);
+        write_specification!("G{}", self.global_address_space);
+        write_specification!("A{}", self.alloca_address_space);
+
+        for layout in self.pointer_layouts.layouts.values() {
+            let mut buffer = String::new();
+
+            write!(
+                &mut buffer,
+                "p{}:{}:{}",
+                layout.address_space,
+                layout.size.bits(),
+                BitSize::unwrap_bits(layout.alignment.abi)
+            )?;
+
+            if let Some(preferred_alignment) = layout.alignment.preferred {
+                write!(&mut buffer, ":{}", preferred_alignment.bits())?;
+            }
+
+            if let Some(index_size) = layout.index_size {
+                write!(&mut buffer, ":{}", index_size.bits())?;
+            }
+
+            specifications.push(buffer);
+        }
+
+        let mut write_primitive_alignments =
+            |s: char, alignments: &PrimitiveAlignmentMap| -> std::fmt::Result {
+                for (size, pair) in alignments.layouts.iter() {
+                    let mut buffer = String::new();
+
+                    write!(
+                        &mut buffer,
+                        "{}{}:{}",
+                        s,
+                        size.bits(),
+                        BitSize::unwrap_bits(pair.abi)
+                    )?;
+
+                    if let Some(preferred_alignment) = pair.preferred {
+                        write!(&mut buffer, ":{}", preferred_alignment.bits())?;
+                    }
+
+                    specifications.push(buffer);
+                }
+
+                Ok(())
+            };
+
+        write_primitive_alignments('i', &self.integer_alignments)?;
+        write_primitive_alignments('v', &self.integer_alignments)?;
+        write_primitive_alignments('f', &self.integer_alignments)?;
+
+        specifications.push({
+            let mut buffer = String::new();
+            write!(
+                &mut buffer,
+                "a:{}",
+                BitSize::unwrap_bits(self.aggregate_object_alignment.abi)
+            )?;
+            if let Some(preferred_alignment) = self.aggregate_object_alignment.preferred {
+                write!(&mut buffer, ":{}", preferred_alignment.bits())?;
+            }
+            buffer
+        });
+
+        if let Some(function_pointer_alignment) = &self.function_pointer_alignment {
+            write_specification!(
+                "F{}{}",
+                function_pointer_alignment.alignment_type(),
+                function_pointer_alignment.abi_alignment().bits()
+            );
+        }
+
+        //m
+
+        //n
+
+        //ni
+
+        for (index, s) in specifications.iter().enumerate() {
+            if index > 0 {
+                f.write_char('-')?;
+            }
+
+            f.write_str(&s)?;
+        }
+
+        Ok(())
     }
 }

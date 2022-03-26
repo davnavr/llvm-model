@@ -11,6 +11,7 @@ pub mod interop;
 pub mod module;
 pub mod target;
 
+pub use identifier::{Id, Identifier};
 pub use module::Module;
 pub use target::Target;
 

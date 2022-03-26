@@ -51,3 +51,13 @@ impl std::fmt::Debug for Module<'_> {
             .finish()
     }
 }
+
+impl std::fmt::Display for Module<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        use std::fmt::Write as _;
+
+        writeln!(f, "target triple = \"{}\"", self.target_triple())?;
+        writeln!(f, "target datalayout = \"{}\"", self.target_layout())?;
+        Ok(())
+    }
+}
