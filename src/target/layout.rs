@@ -690,6 +690,25 @@ impl TryFrom<&Id> for Layout {
                         layout.mangling = Some(mangling);
                         remaining
                     }
+                    'n' => {
+                        let (mut remaining, first_size) = parse_bit_size(information)?;
+
+                        let mut push_integer_width = |size: Option<BitSize>| -> Result<(), ParseError> {
+                            layout
+                            .native_integer_widths
+                            .push(size.ok_or_else(|| ParseError::ExpectedNonZeroSize('n'))?);
+                            Ok(())
+                        };
+
+                        push_integer_width(first_size)?;
+
+                        while let (next_remaining, Some(next_size)) = parse_information(parse_bit_size, remaining)? {
+                            push_integer_width(next_size)?;
+                            remaining = next_remaining;
+                        }
+
+                        remaining
+                    }
                     _ => return Err(ParseError::InvalidSpecification(*kind)),
                 };
 
