@@ -234,8 +234,15 @@ impl PointerLayoutMap {
     }
 
     /// Gets the pointer layout used for the given address space.
+    /// 
+    /// Prefer using `PointerLayoutMap::get_or_default` for determining the pointer layout for a given address space.
     pub fn get(&self, address_space: AddressSpace) -> Option<&PointerLayout> {
         self.layouts.get(&address_space)
+    }
+
+    /// Gets the pointer layout used for a given address space, returning the default layout value if it is not specified.
+    pub fn get_or_default(&self, address_space: AddressSpace) -> &PointerLayout {
+        self.get(address_space).unwrap_or(&PointerLayout::LAYOUT_64_BIT)
     }
 }
 
@@ -296,6 +303,10 @@ impl PrimitiveAlignmentMap {
     pub fn get(&self, size: BitSize) -> Option<&AlignmentPair> {
         self.layouts.get(&size)
     }
+
+    // TODO: See https://llvm.org/docs/LangRef.html#data-layout point 2 for rules regarding alignment for a type if it is not explicitly set.
+    // TODO: May need helpers to determine smallest, largest, and nearest values.
+    //pub fn get_or_default(&self, size: BitSize) -> &AlignmentPair {  }
 }
 
 /// Indicates the type of alignment used for function pointers.
