@@ -299,6 +299,18 @@ impl PrimitiveAlignmentMap {
         &VECTOR_ALIGNMENT_DEFAULTS
     }
 
+    /// Inserts alignment values corresponding to a particular size.
+    pub fn insert(
+        &mut self,
+        size: BitSize,
+        alignment: AlignmentPair,
+    ) -> Result<&AlignmentPair, AlignmentPair> {
+        match self.layouts.entry(size) {
+            hash_map::Entry::Vacant(vacant) => Ok(vacant.insert(alignment)),
+            hash_map::Entry::Occupied(occupied) => Err(occupied.get().clone()),
+        }
+    }
+
     /// Gets the alignment for a value of a particular size.
     pub fn get(&self, size: BitSize) -> Option<&AlignmentPair> {
         self.layouts.get(&size)
@@ -450,6 +462,13 @@ pub enum ParseError {
     /// Used when an `m` specification uses an invalid option.
     #[error("{0} is not a valid mangling specification option")]
     InvalidManglingValue(char),
+    /// Used when an `i`, `v`, or `f` specification is duplicated for a particular size.
+    #[error("duplicate '{specification}' specification for size {size:?}")]
+    DuplicatePrimitiveAlignment {
+        /// The duplicated specification.
+        specification: char,
+        /// The duplicate size value.
+        size: BitSize },
     /// Used when a specification string is empty.
     #[error("specifications must not be empty")]
     EmptySpecification,
@@ -524,6 +543,35 @@ impl TryFrom<&Id> for Layout {
             }
         }
 
+        fn parse_primitive_alignment<'a>(
+            specification: char,
+            lookup: &mut PrimitiveAlignmentMap,
+            s: &'a [char],
+        ) -> ParseResult<'a, ()> {
+            let (remaining, size) =
+                parse_information_or(parse_bit_size, || ParseError::MissingInformation, s)?;
+            let (remaining, abi) =
+                parse_information_or(parse_bit_size, || ParseError::MissingInformation, remaining)?;
+            let (remaining, pref) = parse_information(parse_bit_size, remaining)?;
+
+            let primitive_size =
+                size.ok_or_else(|| ParseError::ExpectedNonZeroSize(specification))?;
+
+            match lookup.insert(
+                primitive_size,
+                AlignmentPair {
+                    abi,
+                    preferred: pref.flatten(),
+                },
+            ) {
+                Ok(_) => Ok((remaining, ())),
+                Err(_) => Err(ParseError::DuplicatePrimitiveAlignment {
+                    specification,
+                    size: primitive_size,
+                }),
+            }
+        }
+
         fn parse_specification(layout: &mut Layout, s: &[char]) -> Result<(), ParseError> {
             if let Some(kind) = s.first() {
                 let information = &s[1..];
@@ -589,9 +637,18 @@ impl TryFrom<&Id> for Layout {
                             }
                         }
                     }
-                    //'i'
-                    //'v'
-                    //'f'
+                    'i' => {
+                        let (remaining, ()) = parse_primitive_alignment('i', &mut layout.integer_alignments, information)?;
+                        remaining
+                    }
+                    'v' => {
+                        let (remaining, ()) = parse_primitive_alignment('i', &mut layout.vector_alignments, information)?;
+                        remaining
+                    }
+                    'f' => {
+                        let (remaining, ()) = parse_primitive_alignment('i', &mut layout.float_alignments, information)?;
+                        remaining
+                    }
                     //'a'
                     //'F'
                     'm' => {
