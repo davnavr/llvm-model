@@ -2,20 +2,24 @@
 ///
 /// An example is used instead of test functions since LLVM initialization functions probably shouldn't be called more than once.
 fn main() {
-    use llvm_model::{interop::llvm_sys::target as sys_target, target};
+    use llvm_model::{interop, target};
 
     unsafe {
         llvm_sys::target::LLVM_InitializeAllTargets();
         llvm_sys::target::LLVM_InitializeAllTargetInfos();
         llvm_sys::target::LLVM_InitializeNativeTarget();
 
+        let host_machine = interop::llvm_sys::target::TargetMachine::host_machine(
+            target::CodeGenerationOptimization::Default,
+            target::RelocationMode::Default,
+            target::CodeModel::Default,
+        ).unwrap();
+
         println!(
             "Current: {:?}",
-            sys_target::TargetMachine::host_machine(
-                target::CodeGenerationOptimization::Default,
-                target::RelocationMode::Default,
-                target::CodeModel::Default
-            )
+            &host_machine,
         );
+
+        println!("Current Layout {:?}", interop::llvm_sys::target::TargetLayout::try_from(&host_machine));
     }
 }

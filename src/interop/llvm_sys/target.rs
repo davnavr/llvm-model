@@ -300,7 +300,7 @@ impl Drop for TargetMachine<'_> {
 }
 
 /// Error used when parsing a target data layout fails.
-pub type LayoutParseError = target::layout::ParseError<'static>;
+pub type LayoutParseError = target::layout::ParseError;
 
 /// Error used when an attempt to convert from a reference to a target data layout fails.
 #[derive(Debug)]
@@ -317,12 +317,12 @@ crate::enum_case_from!(InvalidLayoutError, ParseError, LayoutParseError);
 
 /// Represents a target data layout.
 #[derive(Debug)]
-pub struct TargetLayout<'a> {
-    layout: Cow<'a, target::Layout>,
+pub struct TargetLayout {
+    layout: target::Layout,
     reference: LLVMTargetDataRef,
 }
 
-impl TargetLayout<'_> {
+impl TargetLayout {
     /// Description of the target layout.
     pub fn layout(&self) -> &target::Layout {
         &self.layout
@@ -344,21 +344,20 @@ impl TargetLayout<'_> {
     pub unsafe fn from_reference(
         target_layout: LLVMTargetDataRef,
     ) -> Result<Self, LayoutParseError> {
-        let parsed_layout = target::Layout::try_from(
-            interop::Message::from_ptr(llvm_sys::target::LLVMCopyStringRepOfTargetData(
-                target_layout,
-            ))
-            .to_identifier(),
-        )?;
+        let layout_string = interop::Message::from_ptr(
+            llvm_sys::target::LLVMCopyStringRepOfTargetData(target_layout),
+        );
+
+        let parsed_layout = target::Layout::try_from(layout_string.to_identifier())?;
 
         Ok(Self {
-            layout: Cow::Owned(parsed_layout),
+            layout: parsed_layout,
             reference: target_layout,
         })
     }
 }
 
-impl TryFrom<&'_ TargetMachine<'_>> for TargetLayout<'_> {
+impl TryFrom<&'_ TargetMachine<'_>> for TargetLayout {
     type Error = LayoutParseError;
 
     fn try_from(target_machine: &TargetMachine) -> Result<Self, Self::Error> {
@@ -381,9 +380,9 @@ impl TryFrom<&'_ TargetMachine<'_>> for TargetLayout<'_> {
     }
 }
 
-//impl<'a> TryFrom<Cow<'a, target::Layout>> for TargetLayout<'a> { }
+//impl TryFrom<target::Layout> for TargetLayout { }
 
-impl Drop for TargetLayout<'_> {
+impl Drop for TargetLayout {
     fn drop(&mut self) {
         unsafe {
             // Safety: Target layout reference is a valid pointer that was "owned" by self.

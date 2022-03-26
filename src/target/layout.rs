@@ -1,7 +1,6 @@
 //! Contains structures used to specify the layout of data for an LLVM target triple.
 
 use crate::identifier::{Id, Identifier};
-use std::borrow::Cow;
 use std::collections::hash_map;
 use std::fmt::{Debug, Display, Formatter, Write as _};
 use std::num::{NonZeroU32, NonZeroU8};
@@ -356,6 +355,9 @@ pub enum Mangling {
     XCOFF,
 }
 
+// TODO: How to enforce multiple of 8 bits for some values, such as stack alignment?
+// pub struct ByteSize
+
 /// Indicates how data is laid out in memory for a specific target.
 #[derive(Clone, Debug)]
 #[non_exhaustive]
@@ -411,32 +413,119 @@ impl Default for Layout {
 
 /// Error used when a layout could not be parsed.
 #[derive(Clone, Debug, thiserror::Error)]
-#[error("{message}")]
-pub struct ParseError<'a> {
-    message: Cow<'a, str>,
+#[non_exhaustive]
+pub enum ParseError {
+    /// Used when an unknown specification was parsed.
+    #[error("{0} is not a valid specification")]
+    InvalidSpecification(char),
+    /// Used when an integer could not be parsed.
+    #[error(transparent)]
+    InvalidInteger(#[from] std::num::ParseIntError),
+    /// Error used when remaining characters in a specification could not be parsed.
+    #[error("Expected end of specification, but got {0}")]
+    ExpectedEnd(String),
+    /// Used when a specification string is empty.
+    #[error("specifications must not be empty")]
+    EmptySpecification,
 }
 
-impl<'a> TryFrom<&'a Id> for Layout {
-    type Error = ParseError<'a>;
+impl TryFrom<&Id> for Layout {
+    type Error = ParseError;
 
-    fn try_from(layout: &'a Id) -> Result<Self, Self::Error> {
+    fn try_from(layout: &Id) -> Result<Self, Self::Error> {
         let mut specifications = layout.split('-');
         let mut layout = Self::default();
 
-        dbg!(&mut specifications, &mut layout);
+        // TODO: Check for some duplicate specifications.
 
-        todo!("parse specifications");
+        type ParseResult<'a, T> = Result<(&'a [char], T), ParseError>;
+
+        fn parse_integer<T: std::str::FromStr<Err = std::num::ParseIntError>>(
+            s: &[char],
+        ) -> ParseResult<'_, T> {
+            let mut digits = String::new();
+            let mut parse_count = 0;
+
+            for d in s.iter().filter(|c| c.is_ascii_digit()) {
+                digits.push(*d);
+                parse_count += 1;
+            }
+
+            let value = T::from_str(&digits)?;
+
+            Ok((&s[parse_count..], value))
+        }
+
+        fn parse_bit_size(s: &[char]) -> ParseResult<Option<BitSize>> {
+            let (remaining, value) = parse_integer::<u32>(s)?;
+            Ok((
+                remaining,
+                NonZeroU32::new(value).map(|bits| BitSize { bits }),
+            ))
+        }
+
+        fn parse_address_space(s: &[char]) -> ParseResult<AddressSpace> {
+            let (remaining, value) = parse_integer::<u32>(s)?;
+            Ok((remaining, AddressSpace(value)))
+        }
+
+        fn parse_specification(layout: &mut Layout, s: &[char]) -> Result<(), ParseError> {
+            if let Some(kind) = s.first() {
+                let information = &s[1..];
+
+                macro_rules! set_address_space {
+                    ($name: ident) => {{
+                        let (remaining, address_space) = parse_address_space(information)?;
+                        layout.$name = address_space;
+                        remaining
+                    }};
+                }
+
+                let remaining = match kind {
+                    'E' => {
+                        layout.endianness = Endianness::Big;
+                        &s[1..]
+                    }
+                    'e' => {
+                        layout.endianness = Endianness::Little;
+                        &s[1..]
+                    }
+                    'S' => {
+                        let (remaining, alignment) = parse_bit_size(information)?;
+                        layout.stack_alignment = alignment;
+                        remaining
+                    }
+                    'P' => set_address_space!(program_address_space),
+                    'G' => set_address_space!(global_address_space),
+                    _ => return Err(ParseError::InvalidSpecification(*kind)),
+                };
+
+                if remaining.is_empty() {
+                    Ok(())
+                } else {
+                    Err(ParseError::ExpectedEnd(remaining.iter().collect()))
+                }
+            } else {
+                Err(ParseError::EmptySpecification)
+            }
+        }
+
+        let mut buffer: Vec<char> = Vec::new();
+
+        while let Some(spec) = specifications.next() {
+            buffer.clear();
+            buffer.extend(spec.chars());
+            parse_specification(&mut layout, &buffer)?;
+        }
 
         Ok(layout)
     }
 }
 
 impl TryFrom<Identifier> for Layout {
-    type Error = ParseError<'static>;
+    type Error = ParseError;
 
     fn try_from(layout: Identifier) -> Result<Self, Self::Error> {
-        Self::try_from(layout.as_id()).map_err(|error| ParseError {
-            message: Cow::Owned(error.message.into_owned()),
-        })
+        Self::try_from(layout.as_id())
     }
 }
