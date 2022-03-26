@@ -100,7 +100,6 @@ impl Debug for BitSize {
 /// Specifies an ABI and an optional preferred alignment. If the preferred alignment is omitted, the ABI alignment is used.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AlignmentPair {
-    // TODO: How to allow ABI alignment of 0
     abi: Option<BitSize>,
     preferred: Option<BitSize>,
 }
@@ -432,9 +431,18 @@ pub enum ParseError {
     /// Used when an integer could not be parsed.
     #[error(transparent)]
     InvalidInteger(#[from] std::num::ParseIntError),
-    /// Error used when remaining characters in a specification could not be parsed.
-    #[error("Expected end of specification, but got {0}")]
+    /// Used when the specification ends after a `:`.
+    #[error("missing information after colon")]
+    MissingInformation,
+    /// Used when remaining characters in a specification could not be parsed.
+    #[error("expected end of specification, but got {0}")]
     ExpectedEnd(String),
+    /// Used when more than one `p` specification for a particular address space.
+    #[error("duplicate pointer layout specified for address space {0:?}")]
+    DuplicatePointerLayout(AddressSpace),
+    /// Used when a non-zero size was expected in a particular specification.
+    #[error("expected non-zero size value in specification {0}")]
+    ExpectedNonZeroSize(char),
     /// Used when a specification string is empty.
     #[error("specifications must not be empty")]
     EmptySpecification,
@@ -480,6 +488,24 @@ impl TryFrom<&Id> for Layout {
             Ok((remaining, AddressSpace(value)))
         }
 
+        fn parse_information<T, P: FnOnce(&[char]) -> ParseResult<T>>(parser: P, s: &[char]) -> ParseResult<Option<T>> {
+            match s.first() {
+                Some(':') => {
+                    let (remaining, value) = parser(&s[1..])?;
+                    Ok((remaining, Some(value)))
+                },
+                Some(_) => Err(ParseError::ExpectedEnd(s.iter().skip(1).collect())),
+                None => Ok((&[], None))
+            }
+        }
+
+        fn parse_information_or<T, P: FnOnce(&[char]) -> ParseResult<T>, E: FnOnce() -> ParseError>(parser: P, error: E, s: &[char]) -> ParseResult<T> {
+            match parse_information(parser, s)? {
+                (remaining, Some(value)) => Ok((remaining, value)),
+                (_, None) => Err(error()),
+            }
+        }
+
         fn parse_specification(layout: &mut Layout, s: &[char]) -> Result<(), ParseError> {
             if let Some(kind) = s.first() {
                 let information = &s[1..];
@@ -508,6 +534,33 @@ impl TryFrom<&Id> for Layout {
                     }
                     'P' => set_address_space!(program_address_space),
                     'G' => set_address_space!(global_address_space),
+                    'A' => set_address_space!(alloca_address_space),
+                    'p' => {
+                        // Peek to see if an address space is specified.
+                        let (remaining, address_space) = match information.first() {
+                            Some(':') => (information, AddressSpace::VON_NEUMANN_DEFAULT),
+                            Some(_) => parse_address_space(information)?,
+                            _ => return Err(ParseError::MissingInformation),
+                        };
+
+                        let (remaining, size) = parse_information_or(parse_bit_size, || ParseError::MissingInformation, remaining)?;
+                        let (remaining, abi) = parse_information_or(parse_bit_size, || ParseError::MissingInformation, remaining)?;
+                        let (remaining, pref) = parse_information(parse_bit_size, remaining)?;
+                        let (remaining, idx) = parse_information(parse_bit_size, remaining)?;
+
+                        match layout.pointer_layouts.insert(PointerLayout {
+                            address_space,
+                            alignment: AlignmentPair {
+                                abi,
+                                preferred: pref.flatten(),
+                            },
+                            size: size.ok_or_else(|| ParseError::ExpectedNonZeroSize('p'))?,
+                            index_size: idx.flatten(),
+                        }) {
+                            Ok(_) => remaining,
+                            Err(_) => return Err(ParseError::DuplicatePointerLayout(address_space)),
+                        }
+                    }
                     _ => return Err(ParseError::InvalidSpecification(*kind)),
                 };
 
