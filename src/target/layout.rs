@@ -300,7 +300,7 @@ impl PrimitiveAlignmentMap {
     }
 
     /// Inserts alignment values corresponding to a particular size.
-    pub fn insert(
+    pub fn try_insert(
         &mut self,
         size: BitSize,
         alignment: AlignmentPair,
@@ -309,6 +309,11 @@ impl PrimitiveAlignmentMap {
             hash_map::Entry::Vacant(vacant) => Ok(vacant.insert(alignment)),
             hash_map::Entry::Occupied(occupied) => Err(occupied.get().clone()),
         }
+    }
+
+    /// Inserts an alignment value for a particular size, overwritting any previous value.
+    pub fn insert_or_replace(&mut self, size: BitSize, alignment: AlignmentPair) {
+        self.layouts.insert(size, alignment);
     }
 
     /// Gets the alignment for a value of a particular size.
@@ -468,7 +473,8 @@ pub enum ParseError {
         /// The duplicated specification.
         specification: char,
         /// The duplicate size value.
-        size: BitSize },
+        size: BitSize,
+    },
     /// Used when a specification string is empty.
     #[error("specifications must not be empty")]
     EmptySpecification,
@@ -548,28 +554,21 @@ impl TryFrom<&Id> for Layout {
             lookup: &mut PrimitiveAlignmentMap,
             s: &'a [char],
         ) -> ParseResult<'a, ()> {
-            let (remaining, size) =
-                parse_information_or(parse_bit_size, || ParseError::MissingInformation, s)?;
+            let (remaining, size) = parse_bit_size(s)?;
             let (remaining, abi) =
                 parse_information_or(parse_bit_size, || ParseError::MissingInformation, remaining)?;
             let (remaining, pref) = parse_information(parse_bit_size, remaining)?;
 
-            let primitive_size =
-                size.ok_or_else(|| ParseError::ExpectedNonZeroSize(specification))?;
-
-            match lookup.insert(
-                primitive_size,
+            // TODO: Better way to replace duplicate primitive alignment.
+            lookup.insert_or_replace(
+                size.ok_or_else(|| ParseError::ExpectedNonZeroSize(specification))?,
                 AlignmentPair {
                     abi,
                     preferred: pref.flatten(),
                 },
-            ) {
-                Ok(_) => Ok((remaining, ())),
-                Err(_) => Err(ParseError::DuplicatePrimitiveAlignment {
-                    specification,
-                    size: primitive_size,
-                }),
-            }
+            );
+
+            Ok((remaining, ()))
         }
 
         fn parse_specification(layout: &mut Layout, s: &[char]) -> Result<(), ParseError> {
@@ -638,15 +637,27 @@ impl TryFrom<&Id> for Layout {
                         }
                     }
                     'i' => {
-                        let (remaining, ()) = parse_primitive_alignment('i', &mut layout.integer_alignments, information)?;
+                        let (remaining, ()) = parse_primitive_alignment(
+                            'i',
+                            &mut layout.integer_alignments,
+                            information,
+                        )?;
                         remaining
                     }
                     'v' => {
-                        let (remaining, ()) = parse_primitive_alignment('i', &mut layout.vector_alignments, information)?;
+                        let (remaining, ()) = parse_primitive_alignment(
+                            'i',
+                            &mut layout.vector_alignments,
+                            information,
+                        )?;
                         remaining
                     }
                     'f' => {
-                        let (remaining, ()) = parse_primitive_alignment('i', &mut layout.float_alignments, information)?;
+                        let (remaining, ()) = parse_primitive_alignment(
+                            'i',
+                            &mut layout.float_alignments,
+                            information,
+                        )?;
                         remaining
                     }
                     //'a'
