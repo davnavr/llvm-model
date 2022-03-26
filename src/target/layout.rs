@@ -484,9 +484,6 @@ impl TryFrom<&Id> for Layout {
     type Error = ParseError;
 
     fn try_from(layout: &Id) -> Result<Self, Self::Error> {
-        let mut specifications = layout.split('-');
-        let mut layout = Self::default();
-
         // TODO: Check for some duplicate specifications.
 
         type ParseResult<'a, T> = Result<(&'a [char], T), ParseError>;
@@ -561,7 +558,7 @@ impl TryFrom<&Id> for Layout {
 
             // TODO: Better way to replace duplicate primitive alignment.
             lookup.insert_or_replace(
-                size.ok_or_else(|| ParseError::ExpectedNonZeroSize(specification))?,
+                size.ok_or(ParseError::ExpectedNonZeroSize(specification))?,
                 AlignmentPair {
                     abi,
                     preferred: pref.flatten(),
@@ -627,7 +624,7 @@ impl TryFrom<&Id> for Layout {
                                 abi,
                                 preferred: pref.flatten(),
                             },
-                            size: size.ok_or_else(|| ParseError::ExpectedNonZeroSize('p'))?,
+                            size: size.ok_or(ParseError::ExpectedNonZeroSize('p'))?,
                             index_size: idx.flatten(),
                         }) {
                             Ok(_) => remaining,
@@ -693,16 +690,19 @@ impl TryFrom<&Id> for Layout {
                     'n' => {
                         let (mut remaining, first_size) = parse_bit_size(information)?;
 
-                        let mut push_integer_width = |size: Option<BitSize>| -> Result<(), ParseError> {
-                            layout
-                            .native_integer_widths
-                            .push(size.ok_or_else(|| ParseError::ExpectedNonZeroSize('n'))?);
-                            Ok(())
-                        };
+                        let mut push_integer_width =
+                            |size: Option<BitSize>| -> Result<(), ParseError> {
+                                layout
+                                    .native_integer_widths
+                                    .push(size.ok_or(ParseError::ExpectedNonZeroSize('n'))?);
+                                Ok(())
+                            };
 
                         push_integer_width(first_size)?;
 
-                        while let (next_remaining, Some(next_size)) = parse_information(parse_bit_size, remaining)? {
+                        while let (next_remaining, Some(next_size)) =
+                            parse_information(parse_bit_size, remaining)?
+                        {
                             push_integer_width(next_size)?;
                             remaining = next_remaining;
                         }
@@ -722,9 +722,11 @@ impl TryFrom<&Id> for Layout {
             }
         }
 
+        let specifications = layout.split('-');
         let mut buffer: Vec<char> = Vec::new();
+        let mut layout = Self::default();
 
-        while let Some(spec) = specifications.next() {
+        for spec in specifications {
             buffer.clear();
             buffer.extend(spec.chars());
             parse_specification(&mut layout, &buffer)?;
