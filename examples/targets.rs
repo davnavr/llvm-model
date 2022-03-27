@@ -17,5 +17,10 @@ fn main() {
         .unwrap()
     };
 
-    println!("{:?}", &host_target.target());
+    let mut module = interop::llvm_sys::ModuleBuilder::new(
+        Identifier::try_from("target_test").unwrap(),
+        &host_target,
+    );
+
+    println!("{}", module.module());
 }

@@ -9,6 +9,7 @@ pub mod module;
 pub mod target;
 
 pub use message::Message;
+pub use module::Builder as ModuleBuilder;
 
 /// An error type for operations that call the LLVM C APIs that can potentially fail.
 pub type Result<T> = std::result::Result<T, Message>;

@@ -392,7 +392,7 @@ impl Target {
             layout,
         }
     }
-    
+
     /// Gets the machine for this target.
     pub fn machine(&self) -> &TargetMachine {
         &self.machine
