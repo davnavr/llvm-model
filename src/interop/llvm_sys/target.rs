@@ -97,10 +97,12 @@ impl<'a> TargetTriple<'a> {
     /// # Safety
     /// See [`identifier_to_target_ref`].
     pub unsafe fn host_machine() -> Result<Self, InvalidTripleError> {
-        Self::new(Cow::Owned(target::Triple::from(
+        // Safety: Allocated message is disposed after being converted to an identifier.
+        let triple_string =
             interop::Message::from_ptr(llvm_sys::target_machine::LLVMGetDefaultTargetTriple())
-                .to_identifier(),
-        )))
+                .to_identifier();
+
+        Self::new(Cow::Owned(target::Triple::from(triple_string)))
     }
 }
 
@@ -214,7 +216,11 @@ impl TargetMachine {
         code_model: target::CodeModel,
     ) -> Result<Self, InvalidTripleError> {
         let host_triple = TargetTriple::host_machine()?;
+
+        // Safety: disposed only after returning.
         let cpu_name = interop::Message::from_ptr(llvm_sys::target_machine::LLVMGetHostCPUName());
+
+        // Safety: disposed only after returning.
         let features =
             interop::Message::from_ptr(llvm_sys::target_machine::LLVMGetHostCPUFeatures());
 
@@ -315,6 +321,7 @@ impl TargetLayout {
     pub unsafe fn from_reference(
         target_layout: LLVMTargetDataRef,
     ) -> Result<Self, LayoutParseError> {
+        // Safety: not dropped before being converted to an identifier.
         let layout_string = interop::Message::from_ptr(
             llvm_sys::target::LLVMCopyStringRepOfTargetData(target_layout),
         );
