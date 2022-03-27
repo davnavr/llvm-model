@@ -4,6 +4,8 @@
 fn main() {
     use llvm_model::{interop, target, Identifier};
 
+    let context = unsafe { llvm_sys::core::LLVMGetGlobalContext() };
+
     let host_target = unsafe {
         llvm_sys::target::LLVM_InitializeAllTargets();
         llvm_sys::target::LLVM_InitializeAllTargetInfos();
@@ -17,10 +19,10 @@ fn main() {
         .unwrap()
     };
 
-    let mut module = interop::llvm_sys::ModuleBuilder::new(
+    let module = interop::llvm_sys::ModuleBuilder::new(
         Identifier::try_from("target_test").unwrap(),
         &host_target,
     );
 
-    println!("{}", module.module());
+    println!("{}", unsafe { module.into_message(context) }.unwrap().to_identifier());
 }
