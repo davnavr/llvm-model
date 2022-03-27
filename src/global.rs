@@ -55,7 +55,7 @@ impl Display for Linkage {
 }
 
 /// Well-known calling conventions used by functions.
-/// 
+///
 /// See [the latest LLVM documentation on calling conventions here](https://llvm.org/docs/LangRef.html#callingconv).
 #[derive(Copy, Clone, Debug, Eq)]
 #[non_exhaustive]
@@ -140,7 +140,7 @@ impl Display for CallingConvention {
 }
 
 /// A function definition or declaration.
-/// 
+///
 /// See [the latest LLVM documentation on functions here](https://llvm.org/docs/LangRef.html#functions).
 #[derive(Debug)]
 pub struct Function {
@@ -224,4 +224,12 @@ pub enum Value {
     //Variable(Variable),
     /// A function definition.
     Function(Rc<Function>),
+}
+
+impl Display for Value {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        match self {
+            Self::Function(function) => Display::fmt(&function, f),
+        }
+    }
 }

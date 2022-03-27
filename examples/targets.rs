@@ -9,7 +9,7 @@ fn main() {
         llvm_sys::target::LLVM_InitializeAllTargetInfos();
         llvm_sys::target::LLVM_InitializeNativeTarget();
 
-        interop::llvm_sys::target::host_machine_target(
+        interop::llvm_sys::target::Target::host_machine_target(
             target::CodeGenerationOptimization::Default,
             target::RelocationMode::Default,
             target::CodeModel::Default,
@@ -17,10 +17,5 @@ fn main() {
         .unwrap()
     };
 
-    let module = llvm_model::Module::new(
-        Identifier::try_from("target_example").unwrap(),
-        &host_target,
-    );
-
-    println!("{}", &module);
+    println!("{:?}", &host_target.target());
 }

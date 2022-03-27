@@ -184,12 +184,12 @@ impl From<target::CodeModel> for LLVMCodeModel {
 
 /// Represents a target machine.
 #[derive(Debug)]
-pub struct TargetMachine<'a> {
-    machine: Cow<'a, target::Machine>,
+pub struct TargetMachine {
+    machine: target::Machine,
     reference: LLVMTargetMachineRef,
 }
 
-impl TargetMachine<'_> {
+impl TargetMachine {
     /// Information that describes this target machine.
     pub fn machine(&self) -> &target::Machine {
         &self.machine
@@ -234,24 +234,24 @@ impl TargetMachine<'_> {
                     relocation_mode.into(),
                     code_model.into(),
                 ),
-            machine: Cow::Owned(target::Machine::new(
+            machine: target::Machine::new(
                 host_triple.triple().clone(),
                 cpu_name.to_identifier(),
                 features.to_identifier(),
                 optimization_level,
                 relocation_mode,
                 code_model,
-            )),
+            ),
         })
     }
 
     //pub unsafe fn from_reference
 }
 
-impl<'a> TryFrom<Cow<'a, target::Machine>> for TargetMachine<'a> {
+impl TryFrom<target::Machine> for TargetMachine {
     type Error = InvalidTripleError;
 
-    fn try_from(target_machine: Cow<'a, target::Machine>) -> Result<Self, Self::Error> {
+    fn try_from(target_machine: target::Machine) -> Result<Self, Self::Error> {
         Ok(Self {
             reference: unsafe {
                 let target_triple =
@@ -277,23 +277,7 @@ impl<'a> TryFrom<Cow<'a, target::Machine>> for TargetMachine<'a> {
     }
 }
 
-impl TryFrom<target::Machine> for TargetMachine<'_> {
-    type Error = InvalidTripleError;
-
-    fn try_from(target_machine: target::Machine) -> Result<Self, Self::Error> {
-        Self::try_from(Cow::Owned(target_machine))
-    }
-}
-
-impl<'a> TryFrom<&'a target::Machine> for TargetMachine<'a> {
-    type Error = InvalidTripleError;
-
-    fn try_from(target_machine: &'a target::Machine) -> Result<Self, Self::Error> {
-        Self::try_from(Cow::Borrowed(target_machine))
-    }
-}
-
-impl Drop for TargetMachine<'_> {
+impl Drop for TargetMachine {
     fn drop(&mut self) {
         unsafe { llvm_sys::target_machine::LLVMDisposeTargetMachine(self.reference) }
     }
@@ -344,7 +328,7 @@ impl TargetLayout {
     }
 }
 
-impl TryFrom<&'_ TargetMachine<'_>> for TargetLayout {
+impl TryFrom<&TargetMachine> for TargetLayout {
     type Error = LayoutParseError;
 
     fn try_from(target_machine: &TargetMachine) -> Result<Self, Self::Error> {
@@ -391,22 +375,51 @@ pub enum InvalidTargetError {
 crate::enum_case_from!(InvalidTargetError, InvalidTriple, InvalidTripleError);
 crate::enum_case_from!(InvalidTargetError, InvalidLayout, LayoutParseError);
 
-/// Gets a target for the host machine.
-///
-/// # Safety
-/// See [`TargetMachine::host_machine`].
-pub unsafe fn host_machine_target(
-    optimization_level: target::CodeGenerationOptimization,
-    relocation_mode: target::RelocationMode,
-    code_model: target::CodeModel,
-) -> Result<target::Target, InvalidTargetError> {
-    let host_machine =
-        TargetMachine::host_machine(optimization_level, relocation_mode, code_model)?;
-    let host_layout = TargetLayout::try_from(&host_machine)?;
-    Ok(target::Target::new(
-        host_machine.machine().clone(),
-        host_layout.layout().clone(),
-    ))
+/// An LLVM target machine and data layout.
+#[derive(Debug)]
+pub struct Target {
+    machine: TargetMachine,
+    layout: TargetLayout,
+    target: target::Target,
 }
 
-//pub struct Target
+impl Target {
+    /// Creates a new target.
+    pub fn new(machine: TargetMachine, layout: TargetLayout) -> Self {
+        Self {
+            target: target::Target::new(machine.machine().clone(), layout.layout().clone()),
+            machine,
+            layout,
+        }
+    }
+    
+    /// Gets the machine for this target.
+    pub fn machine(&self) -> &TargetMachine {
+        &self.machine
+    }
+
+    /// Gets the target.
+    pub fn target(&self) -> &target::Target {
+        &self.target
+    }
+
+    /// Gets the data layout for this target.
+    pub fn data_layout(&self) -> &TargetLayout {
+        &self.layout
+    }
+
+    /// Gets a target for the host machine.
+    ///
+    /// # Safety
+    /// See [`TargetMachine::host_machine`].
+    pub unsafe fn host_machine_target(
+        optimization_level: target::CodeGenerationOptimization,
+        relocation_mode: target::RelocationMode,
+        code_model: target::CodeModel,
+    ) -> Result<Self, InvalidTargetError> {
+        let host_machine =
+            TargetMachine::host_machine(optimization_level, relocation_mode, code_model)?;
+        let host_layout = TargetLayout::try_from(&host_machine)?;
+        Ok(Self::new(host_machine, host_layout))
+    }
+}

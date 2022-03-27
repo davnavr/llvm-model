@@ -761,9 +761,7 @@ impl TryFrom<Identifier> for Layout {
 
 impl Display for Layout {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        let mut specifications: Vec<String> = Vec::new();
-
-        specifications.push(self.endianness.to_string());
+        let mut specifications: Vec<String> = vec![self.endianness.to_string()];
 
         macro_rules! write_specification {
             ($dst: expr, $($arg:tt)*) => {
@@ -861,7 +859,7 @@ impl Display for Layout {
                 f.write_char('-')?;
             }
 
-            f.write_str(&s)?;
+            f.write_str(s)?;
         }
 
         Ok(())
