@@ -3,7 +3,7 @@
 use crate::types;
 use crate::{Id, Identifier};
 use std::cell::Cell;
-use std::fmt::{Display, Formatter};
+use std::fmt::{Display, Formatter, Write as _};
 use std::rc::Rc;
 
 // TODO: Split linkage types into those that are valid for global variables, functions, and both.
@@ -189,6 +189,32 @@ impl Function {
     /// Sets the calling convention used by this function.
     pub fn set_calling_convention(&self, calling_convention: CallingConvention) {
         self.calling_convention.set(calling_convention)
+    }
+}
+
+impl Display for Function {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        write!(f, "define {}", self.get_linkage())?;
+        //rtpreemt
+        //visibility
+        //dllst
+        write!(f, " {}", self.get_calling_convention())?;
+        //unnamed_addr
+        write!(f, " {}", self.signature.return_type())?;
+        //attribute of return type
+        write!(f, " @{} (", self.name())?;
+        for (index, parameter_type) in self.signature().parameter_types().iter().enumerate() {
+            if index > 0 {
+                f.write_str(", ")?;
+            }
+
+            // parameter attributes
+            Display::fmt(&parameter_type, f)?;
+        }
+        f.write_char(')')?;
+        // other things
+        //'{' and then the basic blocks
+        Ok(())
     }
 }
 
