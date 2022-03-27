@@ -1,6 +1,6 @@
 //! Model of the LLVM type system.
 
-use std::fmt::{Display, Formatter};
+use std::fmt::{Display, Formatter, Write as _};
 use std::num::NonZeroU32;
 
 /// Represents the size of an integer, which can be a value from `1` to `2^23`.
@@ -18,6 +18,12 @@ impl IntegerSize {
     }
 }
 
+impl Display for IntegerSize {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        Display::fmt(&self.0, f)
+    }
+}
+
 /// Represents an integer type of an arbitrary bit width.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Integer {
@@ -25,6 +31,27 @@ pub enum Integer {
     Signed(IntegerSize),
     /// An unsigned integer type.
     Unsigned(IntegerSize),
+}
+
+impl Integer {
+    /// Gets the size of the integer.
+    pub fn size(&self) -> IntegerSize {
+        match self {
+            Self::Signed(size) | Self::Unsigned(size) => *size,
+        }
+    }
+}
+
+impl Display for Integer {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        let (signed, size) = match self {
+            Self::Signed(size) => (true, size),
+            Self::Unsigned(size) => (false, size),
+        };
+
+        f.write_char(if signed { 'i' } else { 'u' })?;
+        Display::fmt(size, f)
+    }
 }
 
 /// Represents a floating-point type.
@@ -36,6 +63,16 @@ pub enum Float {
     Float,
     /// 64-bit, IEEE-754 `binary64`.
     Double,
+}
+
+impl Display for Float {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Half => "half",
+            Self::Float => "float",
+            Self::Double => "double",
+        })
+    }
 }
 
 pub use crate::target::layout::AddressSpace;
@@ -72,11 +109,22 @@ impl Pointer {
     }
 }
 
+impl Display for Pointer {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        Display::fmt(&self.pointee_type, f)?;
+        if self.address_space.0 != 0 {
+            write!(f, " addrspace({})", self.address_space)?;
+        }
+        f.write_char('*')
+    }
+}
+
 /// A vector of elements of a specified size.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Vector {
     element_type: Box<FirstClass>,
     count: NonZeroU32,
+    //vscale: bool,
 }
 
 impl Vector {
@@ -95,7 +143,14 @@ impl Vector {
 
     /// Gets the number of elements, guaranteed to be greater than zero.
     pub fn count(&self) -> u32 {
+        // -> Result<u32, u32> // Error if vscale?
         self.count.get()
+    }
+}
+
+impl Display for Vector {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        write!(f, "<{} x {}>", self.count(), &self.element_type)
     }
 }
 
@@ -110,6 +165,17 @@ pub enum SingleValue {
     Pointer(Pointer),
     /// A vector of elements of a specified size.
     Vector(Vector),
+}
+
+impl Display for SingleValue {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        match self {
+            Self::Integer(integer) => Display::fmt(integer, f),
+            Self::Float(float) => Display::fmt(float, f),
+            Self::Pointer(pointer) => Display::fmt(pointer, f),
+            Self::Vector(vector) => Display::fmt(vector, f),
+        }
+    }
 }
 
 //#[derive(Clone, Debug, Eq, PartialEq)]
@@ -142,6 +208,12 @@ impl Array {
     }
 }
 
+impl Display for Array {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        write!(f, "[{} x {}]", self.count, &self.element_type)
+    }
+}
+
 /// Structure types contain members, which each have their own types.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Struct {
@@ -169,8 +241,28 @@ impl Struct {
     }
 }
 
+impl Display for Struct {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        if self.packed {
+            f.write_char('>')?;
+        }
+        f.write_str("{ ")?;
+        for (index, member_type) in self.member_types.iter().enumerate() {
+            if index > 0 {
+                f.write_str(", ")?;
+            }
+            Display::fmt(&member_type, f)?;
+        }
+        f.write_str("} ")?;
+        if self.packed {
+            f.write_char('>')?;
+        }
+        Ok(())
+    }
+}
+
 /// Aggregate types represent types that contain multiple members.
-/// 
+///
 /// Note that vector types are not aggregate types.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Aggregate {
@@ -179,6 +271,15 @@ pub enum Aggregate {
     /// A structure type.
     Struct(Struct),
     //Opaque,
+}
+
+impl Display for Aggregate {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        match self {
+            Self::Array(array) => Display::fmt(array, f),
+            Self::Struct(structure) => Display::fmt(structure, f),
+        }
+    }
 }
 
 /// Values of first class types "are the only ones that can be produced by instructions".
@@ -190,6 +291,21 @@ pub enum FirstClass {
     Aggregate(Aggregate),
 }
 
+impl Display for FirstClass {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        match self {
+            Self::Single(single) => Display::fmt(single, f),
+            Self::Aggregate(aggregate) => Display::fmt(aggregate, f),
+        }
+    }
+}
+
 /// A type representing no value.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct Void;
+
+impl Display for Void {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        f.write_str("void")
+    }
+}
