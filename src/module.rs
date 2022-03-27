@@ -2,6 +2,7 @@
 //!
 //! [See the LLVM documentation on modules](https://llvm.org/docs/LangRef.html#module-structure).
 
+use crate::global;
 use crate::identifier::{Id, Identifier};
 use crate::target;
 
@@ -9,12 +10,17 @@ use crate::target;
 pub struct Module<'t> {
     name: Identifier,
     target: &'t target::Target,
+    global_values: Vec<global::Value>,
 }
 
 impl<'t> Module<'t> {
     /// Creates a new module with the specified name and target.
     pub fn new(name: Identifier, target: &'t target::Target) -> Self {
-        Self { name, target }
+        Self {
+            name,
+            target,
+            global_values: Vec::new(),
+        }
     }
 
     /// Retrieves the name of the module.
@@ -40,6 +46,11 @@ impl<'t> Module<'t> {
     /// Gets the target layout used by this module.
     pub fn target_layout(&self) -> &'t target::Layout {
         self.target.layout()
+    }
+
+    /// Adds a global value to this module, without checking for duplicate symbols.
+    pub fn add_global_value(&mut self, value: global::Value) {
+        self.global_values.push(value)
     }
 }
 

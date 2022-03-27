@@ -6,6 +6,7 @@
 
 #![deny(missing_docs, missing_debug_implementations)]
 
+pub mod global;
 pub mod identifier;
 pub mod interop;
 pub mod module;
@@ -38,6 +39,23 @@ macro_rules! enum_case_from {
             fn from(value: $case_type) -> Self {
                 Self::$enum_case(value)
             }
+        }
+    };
+}
+
+/// Internal helper used to define public getter and setter functions for a [`std::cell::Cell`].
+#[doc(hidden)]
+#[macro_export]
+macro_rules! cell_get_set {
+    ($field: ident, $field_type: ty, $getter_desc: literal, $getter_name: ident, $setter_desc: literal, $setter_name: ident) => {
+        #[doc = $getter_desc]
+        pub fn $getter_name(&self) -> $field_type {
+            std::cell::Cell::<$field_type>::get(&self.$field)
+        }
+
+        #[doc = $setter_desc]
+        pub fn $setter_name(&self, value: $field_type) {
+            std::cell::Cell::<$field_type>::set(&self.$field, value)
         }
     };
 }
