@@ -10,6 +10,7 @@ pub mod identifier;
 pub mod interop;
 pub mod module;
 pub mod target;
+pub mod types;
 
 pub use identifier::{Id, Identifier};
 pub use module::Module;
