@@ -80,7 +80,7 @@ pub use crate::target::layout::AddressSpace;
 /// A pointer type.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Pointer {
-    pointee_type: Box<FirstClass>,
+    pointee_type: Box<FirstClass>, // TODO: Allow function pointers, have an enum PointeeType?
     address_space: AddressSpace,
 }
 
@@ -178,8 +178,64 @@ impl Display for SingleValue {
     }
 }
 
-//#[derive(Clone, Debug, Eq, PartialEq)]
-//pub struct Function
+/// Describes the type of value returned by a function.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ReturnType {
+    /// A type representing no value.
+    Void,
+    /// A return type.
+    FirstClass(FirstClass),
+}
+
+impl Display for ReturnType {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        match self {
+            Self::FirstClass(return_type) => Display::fmt(return_type, f),
+            Self::Void => f.write_str("void"),
+        }
+    }
+}
+
+/// Represents a function type, which describes the return types and parameter types of a function.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Function {
+    return_type: ReturnType,
+    parameter_types: Vec<FirstClass>,
+}
+
+impl Function {
+    /// Creates a function type.
+    pub fn new(return_type: ReturnType, parameter_types: impl Into<Vec<FirstClass>>) -> Self {
+        Self {
+            return_type,
+            parameter_types: parameter_types.into(),
+        }
+    }
+
+    /// Gets the return type.
+    pub fn return_type(&self) -> &ReturnType {
+        &self.return_type
+    }
+
+    /// Gets the types of the parameters.
+    pub fn parameter_types(&self) -> &[FirstClass] {
+        &self.parameter_types
+    }
+}
+
+impl Display for Function {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        Display::fmt(&self.return_type, f)?;
+        f.write_str(" (")?;
+        for (index, parameter_type) in self.parameter_types.iter().enumerate() {
+            if index > 0 {
+                f.write_str(", ")?;
+            }
+            Display::fmt(&parameter_type, f)?;
+        }
+        f.write_char(')')
+    }
+}
 
 /// A type containing a fixed number of elements that are sequentially arranged in memory.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -297,15 +353,5 @@ impl Display for FirstClass {
             Self::Single(single) => Display::fmt(single, f),
             Self::Aggregate(aggregate) => Display::fmt(aggregate, f),
         }
-    }
-}
-
-/// A type representing no value.
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub struct Void;
-
-impl Display for Void {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        f.write_str("void")
     }
 }
