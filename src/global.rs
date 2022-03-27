@@ -56,7 +56,7 @@ impl Display for Linkage {
 
 /// Well-known calling conventions used by functions.
 /// 
-/// See [the LLVM documentation for calling conventions](https://llvm.org/docs/LangRef.html#callingconv).
+/// See [the latest LLVM documentation on calling conventions here](https://llvm.org/docs/LangRef.html#callingconv).
 #[derive(Copy, Clone, Debug, Eq)]
 #[non_exhaustive]
 pub enum CallingConvention {
@@ -122,7 +122,26 @@ impl std::cmp::PartialEq for CallingConvention {
     }
 }
 
+impl Display for CallingConvention {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        match self {
+            Self::C => f.write_str("ccc"),
+            Self::Fast => f.write_str("fastcc"),
+            Self::Cold => f.write_str("coldcc"),
+            Self::WebKitJS => f.write_str("webkit_jscc"),
+            Self::AnyReg => f.write_str("anyregcc"),
+            Self::PreserveMost => f.write_str("preserve_mostcc"),
+            Self::PreserveAll => f.write_str("preserve_allcc"),
+            Self::CxxFastTLS => f.write_str("cxx_fast_tlscc"),
+            Self::Swift => f.write_str("swiftcc"),
+            _ => write!(f, "cc {}", self.value()),
+        }
+    }
+}
+
 /// A function definition or declaration.
+/// 
+/// See [the latest LLVM documentation on functions here](https://llvm.org/docs/LangRef.html#functions).
 #[derive(Debug)]
 pub struct Function {
     name: Identifier,
