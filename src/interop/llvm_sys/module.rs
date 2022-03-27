@@ -45,28 +45,83 @@ impl<'t> Builder<'t> {
         context: llvm_sys::prelude::LLVMContextRef,
     ) -> Result<llvm_sys::prelude::LLVMModuleRef, BuildError> {
         // Safety: module name is newly allocated and is valid.
-        let reference = llvm_sys::core::LLVMModuleCreateWithNameInContext(
-            self.module.name().to_c_string().as_ptr(),
-            context,
-        );
+        let reference = {
+            let module_identfier = self.module.name().to_c_string();
+
+            llvm_sys::core::LLVMModuleCreateWithNameInContext(module_identfier.as_ptr(), context)
+        };
 
         // TODO: Figure out if things like CPU name, CPU features, code_layout, etc. of target machine is needed or can even be set.
         {
             // Safety: triple string is wrapped in message.
-            let triple_string = llvm_sys::target_machine::LLVMGetTargetMachineTriple(
-                self.target.machine().reference(),
-            );
+            let triple_string =
+                interop::Message::from_ptr(llvm_sys::target_machine::LLVMGetTargetMachineTriple(
+                    self.target.machine().reference(),
+                ));
 
             // Safety: Message pointer is guaranteed to be valid.
-            llvm_sys::core::LLVMSetTarget(
-                reference,
-                interop::Message::from_ptr(triple_string).to_ptr(),
-            );
+            llvm_sys::core::LLVMSetTarget(reference, triple_string.to_ptr());
         }
 
         // Safety: target layout was previously allocated and is valid.
         llvm_sys::target::LLVMSetModuleDataLayout(reference, self.target.data_layout().reference());
 
         Ok(reference)
+    }
+
+    /// Writes the string representation of the LLVM module into a message.
+    ///
+    /// # Safety
+    /// Callers must ensure that the LLVM context reference is not null.
+    pub unsafe fn into_message(
+        self,
+        context: llvm_sys::prelude::LLVMContextRef,
+    ) -> Result<interop::Message, BuildError> {
+        // Safety: module reference is not null.
+        let module = Wrapper::new_unchecked(self.into_reference(context)?);
+        // Safety: String representation is an LLVM message that is disposed when the message is dropped.
+        Ok(interop::Message::from_ptr(
+            llvm_sys::core::LLVMPrintModuleToString(module.reference()),
+        ))
+    }
+}
+
+/// A wrapper over an LLVM module reference.
+#[derive(Debug)]
+#[repr(transparent)]
+pub struct Wrapper(std::ptr::NonNull<llvm_sys::LLVMModule>);
+
+impl Wrapper {
+    /// Creates a wrapper over a module reference.
+    ///
+    /// # Safety
+    /// Callers must ensure that the module reference is valid.
+    pub unsafe fn new_unchecked(module: llvm_sys::prelude::LLVMModuleRef) -> Self {
+        Self(std::ptr::NonNull::new_unchecked(module))
+    }
+
+    /// Returns the underlying module reference.
+    ///
+    /// # Safety
+    /// Callers must ensure that the reference is used for the lifetime of the wrapper.
+    pub unsafe fn reference(&self) -> llvm_sys::prelude::LLVMModuleRef {
+        self.0.as_ptr()
+    }
+
+    /// Returns the context associated with the module.
+    pub fn context(&self) -> llvm_sys::prelude::LLVMContextRef {
+        unsafe {
+            // Safety: module reference is assumed to be valid.
+            llvm_sys::core::LLVMGetModuleContext(self.reference())
+        }
+    }
+}
+
+impl std::ops::Drop for Wrapper {
+    fn drop(&mut self) {
+        unsafe {
+            // Safety: module reference is assumed to be valid.
+            llvm_sys::core::LLVMDisposeModule(self.reference())
+        }
     }
 }
