@@ -4,10 +4,12 @@
 //! - [Latest API documentation for `llvm-sys`](https://docs.rs/llvm-sys/latest/llvm_sys/)
 //! - [Documentation for the LLVM C API](https://llvm.org/doxygen/group__LLVMC.html)
 
+pub mod buffer;
 pub mod message;
 pub mod module;
 pub mod target;
 
+pub use buffer::MemoryBuffer;
 pub use message::Message;
 pub use module::Builder as ModuleBuilder;
 

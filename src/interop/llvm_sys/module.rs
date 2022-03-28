@@ -8,6 +8,8 @@ use crate::Identifier;
 use std::collections::hash_map;
 use std::rc::Rc;
 
+pub use llvm_sys::target_machine::LLVMCodeGenFileType as EmitType;
+
 impl From<global::Linkage> for llvm_sys::LLVMLinkage {
     fn from(linkage: global::Linkage) -> Self {
         match linkage {
@@ -24,7 +26,12 @@ impl From<global::Linkage> for llvm_sys::LLVMLinkage {
 /// Error used when an attempt to convert a module into an `LLVMModuleRef` fails.
 #[derive(Debug)]
 #[non_exhaustive]
-pub enum BuildError {}
+pub enum BuildError {
+    /// An unknown error produced by LLVM.
+    Unknown(interop::Message),
+}
+
+crate::enum_case_from!(BuildError, Unknown, interop::Message);
 
 /// Contains pointers to objects allocated with LLVM's C API needed to create a module,
 /// as well a [`llvm-model::Module`].
@@ -56,7 +63,7 @@ impl<'t> Builder<'t> {
     /// Transforms the contents of this module into an `LLVMModuleRef` suitable for use with the LLVM C APIs.
     ///
     /// # Safety
-    /// Callers must ensure that the context reference is a valid pointer.
+    /// Callers must ensure that the context reference is a valid pointer and that the context has not been disposed.
     pub unsafe fn into_reference(
         mut self,
         context: llvm_sys::prelude::LLVMContextRef,
@@ -207,7 +214,7 @@ impl<'t> Builder<'t> {
     /// Writes the string representation of the LLVM module into a message.
     ///
     /// # Safety
-    /// Callers must ensure that the LLVM context reference is not null.
+    /// Callers must ensure that the LLVM context reference is not null and has not been disposed.
     pub unsafe fn into_message(
         self,
         context: llvm_sys::prelude::LLVMContextRef,
@@ -219,7 +226,37 @@ impl<'t> Builder<'t> {
         ))
     }
 
-    //LLVMTargetMachineEmitToMemoryBuffer for emitting assembly or object file
+    /// Emits assembly code or an object file for the module's target machine into a memory buffer.
+    ///
+    /// # Safety
+    /// See [`into_reference`].
+    pub unsafe fn emit_target_code_to_buffer(
+        self,
+        context: llvm_sys::prelude::LLVMContextRef,
+        file_type: EmitType,
+    ) -> Result<interop::MemoryBuffer, BuildError> {
+        let target_machine = self.target.machine();
+        let module = self.into_reference(context)?;
+
+        let mut buffer: llvm_sys::prelude::LLVMMemoryBufferRef = std::ptr::null_mut();
+        let mut error: *mut i8 = std::ptr::null_mut();
+
+        // Don't know if 1 or 0 means success, so the buffer is just checked instead.
+        // Safety: Error is wrapped in a Message later so it is properly disposed.
+        llvm_sys::target_machine::LLVMTargetMachineEmitToMemoryBuffer(
+            target_machine.reference(),
+            module.reference(),
+            file_type,
+            &mut error as *mut _,
+            &mut buffer as *mut llvm_sys::prelude::LLVMMemoryBufferRef,
+        );
+
+        if buffer.is_null() {
+            Err(BuildError::Unknown(interop::Message::from_ptr(error)))
+        } else {
+            Ok(interop::MemoryBuffer::from_reference_unchecked(buffer))
+        }
+    }
 }
 
 /// A wrapper over an LLVM module reference.
