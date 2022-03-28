@@ -7,6 +7,19 @@ use crate::Identifier;
 use std::collections::hash_map;
 use std::rc::Rc;
 
+impl From<global::Linkage> for llvm_sys::LLVMLinkage {
+    fn from(linkage: global::Linkage) -> Self {
+        match linkage {
+            global::Linkage::Private => Self::LLVMLinkerPrivateLinkage,
+            global::Linkage::Internal => Self::LLVMInternalLinkage,
+            global::Linkage::AvailableExternally => Self::LLVMAvailableExternallyLinkage,
+            global::Linkage::Appending => Self::LLVMAppendingLinkage,
+            global::Linkage::External => Self::LLVMExternalLinkage,
+            _ => todo!("bad linkage {}", linkage),
+        }
+    }
+}
+
 /// Error used when an attempt to convert a module into an `LLVMModuleRef` fails.
 #[derive(Debug)]
 #[non_exhaustive]
@@ -143,6 +156,11 @@ impl<'t> Builder<'t> {
                         function.get_calling_convention().value(),
                     );
 
+                    llvm_sys::core::LLVMSetLinkage(
+                        function_reference,
+                        function.get_linkage().into(),
+                    );
+
                     // TODO: Iterate over all blocks
                     for block in function.take_basic_blocks().drain(..) {
                         let block_reference = llvm_sys::core::LLVMAppendBasicBlockInContext(
@@ -153,8 +171,6 @@ impl<'t> Builder<'t> {
 
                         // TODO: Add instructions
                     }
-
-                    //LLVMSetLinkage
 
                     // TODO: Function attributes and other things.
                 }
