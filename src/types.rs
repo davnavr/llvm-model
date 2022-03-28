@@ -2,6 +2,7 @@
 
 use std::fmt::{Display, Formatter, Write as _};
 use std::num::NonZeroU32;
+use std::rc::Rc;
 
 /// Represents the size of an integer, which can be a value from `1` to `2^23`.
 #[derive(Copy, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -9,8 +10,28 @@ use std::num::NonZeroU32;
 pub struct IntegerSize(NonZeroU32);
 
 impl IntegerSize {
+    /// Creates a new size value, without any bounds checks.
+    ///
+    /// # Safety
+    /// Callers must ensure that the size is in the range `1` to `2^23`.
+    pub const unsafe fn new_unchecked(size: u32) -> Self {
+        Self(NonZeroU32::new_unchecked(size))
+    }
+
     /// Minimum size value.
-    pub const MIN: Self = Self(unsafe { NonZeroU32::new_unchecked(1) });
+    pub const MIN: Self = unsafe { Self::new_unchecked(1) };
+
+    /// Size of a 1-byte integer, known as a byte.
+    pub const SIZE_8: Self = unsafe { Self::new_unchecked(8) };
+
+    /// Size of a 2-byte integer.
+    pub const SIZE_16: Self = unsafe { Self::new_unchecked(16) };
+
+    /// Size of a 4-byte integer.
+    pub const SIZE_32: Self = unsafe { Self::new_unchecked(32) };
+
+    /// Size of an 8-byte integer.
+    pub const SIZE_64: Self = unsafe { Self::new_unchecked(64) };
 
     /// Gets the size, in bits.
     pub fn bits(self) -> u32 {
@@ -25,7 +46,7 @@ impl Display for IntegerSize {
 }
 
 /// Represents an integer type of an arbitrary bit width.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum Integer {
     /// A signed integer type.
     Signed(IntegerSize),
@@ -55,7 +76,7 @@ impl Display for Integer {
 }
 
 /// Represents a floating-point type.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum Float {
     /// 16-bit, IEEE-754 `binary16`.
     Half,
@@ -78,28 +99,28 @@ impl Display for Float {
 pub use crate::target::layout::AddressSpace;
 
 /// A pointer type.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Pointer {
-    pointee_type: Box<FirstClass>, // TODO: Allow function pointers, have an enum PointeeType?
+    pointee_type: Rc<FirstClass>, // TODO: Allow function pointers, have an enum PointeeType?
     address_space: AddressSpace,
 }
 
 impl Pointer {
     /// Creates a pointer type pointing to a objects of a particular type in a particular address space.
-    pub fn in_address_space(pointee_type: FirstClass, address_space: AddressSpace) -> Self {
+    pub fn in_address_space(pointee_type: Rc<FirstClass>, address_space: AddressSpace) -> Self {
         Self {
-            pointee_type: Box::new(pointee_type),
+            pointee_type,
             address_space,
         }
     }
 
     /// Creates a pointer type pointing to objects of a particular type.
-    pub fn new(pointee_type: FirstClass) -> Self {
+    pub fn new(pointee_type: Rc<FirstClass>) -> Self {
         Self::in_address_space(pointee_type, AddressSpace::VON_NEUMANN_DEFAULT)
     }
 
     /// The type of object that is pointed to by the pointer type.
-    pub fn pointee_type(&self) -> &FirstClass {
+    pub fn pointee_type(&self) -> &Rc<FirstClass> {
         &self.pointee_type
     }
 
@@ -120,24 +141,24 @@ impl Display for Pointer {
 }
 
 /// A vector of elements of a specified size.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Vector {
-    element_type: Box<FirstClass>,
+    element_type: Rc<FirstClass>,
     count: NonZeroU32,
     //vscale: bool,
 }
 
 impl Vector {
     /// Creates a vector type containing a specified number of elements of a specified type.
-    pub fn new(element_type: FirstClass, count: NonZeroU32) -> Self {
+    pub fn new(element_type: Rc<FirstClass>, count: NonZeroU32) -> Self {
         Self {
-            element_type: Box::new(element_type),
+            element_type,
             count,
         }
     }
 
     /// Gets the type of elements of this vector type.
-    pub fn element_type(&self) -> &FirstClass {
+    pub fn element_type(&self) -> &Rc<FirstClass> {
         &self.element_type
     }
 
@@ -155,7 +176,7 @@ impl Display for Vector {
 }
 
 /// A subset of the types that are valid in registers.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum SingleValue {
     /// Fixed size integer type.
     Integer(Integer),
@@ -179,12 +200,12 @@ impl Display for SingleValue {
 }
 
 /// Describes the type of value returned by a function.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum Return {
     /// A type representing no value.
     Void,
     /// A return type.
-    FirstClass(FirstClass),
+    FirstClass(Rc<FirstClass>),
 }
 
 impl Display for Return {
@@ -197,15 +218,15 @@ impl Display for Return {
 }
 
 /// Represents a function type, which describes the return types and parameter types of a function.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Function {
     return_type: Return,
-    parameter_types: Vec<FirstClass>,
+    parameter_types: Vec<Rc<FirstClass>>,
 }
 
 impl Function {
     /// Creates a function type.
-    pub fn new(return_type: Return, parameter_types: impl Into<Vec<FirstClass>>) -> Self {
+    pub fn new(return_type: Return, parameter_types: impl Into<Vec<Rc<FirstClass>>>) -> Self {
         Self {
             return_type,
             parameter_types: parameter_types.into(),
@@ -218,7 +239,7 @@ impl Function {
     }
 
     /// Gets the types of the parameters.
-    pub fn parameter_types(&self) -> &[FirstClass] {
+    pub fn parameter_types(&self) -> &[Rc<FirstClass>] {
         &self.parameter_types
     }
 }
@@ -238,23 +259,23 @@ impl Display for Function {
 }
 
 /// A type containing a fixed number of elements that are sequentially arranged in memory.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Array {
-    element_type: Box<FirstClass>,
+    element_type: Rc<FirstClass>,
     count: u32,
 }
 
 impl Array {
     /// Creates an array type containing a specified number of elements of a specified type.
-    pub fn new(element_type: FirstClass, count: u32) -> Self {
+    pub fn new(element_type: Rc<FirstClass>, count: u32) -> Self {
         Self {
-            element_type: Box::new(element_type),
+            element_type,
             count,
         }
     }
 
     /// Gets the type of elements of this array type.
-    pub fn element_type(&self) -> &FirstClass {
+    pub fn element_type(&self) -> &Rc<FirstClass> {
         &self.element_type
     }
 
@@ -271,15 +292,15 @@ impl Display for Array {
 }
 
 /// Structure types contain members, which each have their own types.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Struct {
     packed: bool,
-    member_types: Vec<FirstClass>,
+    member_types: Vec<Rc<FirstClass>>,
 }
 
 impl Struct {
     /// Creates a struct with the specified members.
-    pub fn new(member_types: impl Into<Vec<FirstClass>>, packed: bool) -> Self {
+    pub fn new(member_types: impl Into<Vec<Rc<FirstClass>>>, packed: bool) -> Self {
         Self {
             member_types: member_types.into(),
             packed,
@@ -292,7 +313,7 @@ impl Struct {
     }
 
     /// Gets the types of each member.
-    pub fn member_types(&self) -> &[FirstClass] {
+    pub fn member_types(&self) -> &[Rc<FirstClass>] {
         &self.member_types
     }
 }
@@ -320,7 +341,7 @@ impl Display for Struct {
 /// Aggregate types represent types that contain multiple members.
 ///
 /// Note that vector types are not aggregate types.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum Aggregate {
     /// An array type containing a specific number of elements.
     Array(Array),
@@ -339,7 +360,7 @@ impl Display for Aggregate {
 }
 
 /// Values of first class types "are the only ones that can be produced by instructions".
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum FirstClass {
     /// Single
     Single(SingleValue),

@@ -53,6 +53,11 @@ impl<'t> Module<'t> {
     pub fn add_global_value<G: Into<global::Value>>(&mut self, value: G) {
         self.global_values.push(value.into())
     }
+
+    #[cfg(feature = "llvm_sys_interop")]
+    pub(crate) fn drain_global_values(&mut self) -> std::vec::Drain<'_, global::Value> {
+        self.global_values.drain(..)
+    }
 }
 
 impl std::fmt::Debug for Module<'_> {

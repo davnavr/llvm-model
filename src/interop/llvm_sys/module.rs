@@ -1,7 +1,11 @@
 //! Code to interop with LLVM's C APIs for writing a module.
 
+use crate::global;
 use crate::interop::llvm_sys as interop;
+use crate::types;
 use crate::Identifier;
+use std::collections::hash_map;
+use std::rc::Rc;
 
 /// Error used when an attempt to convert a module into an `LLVMModuleRef` fails.
 #[derive(Debug)]
@@ -38,20 +42,22 @@ impl<'t> Builder<'t> {
     /// Transforms the contents of this module into an `LLVMModuleRef` suitable for use with the LLVM C APIs.
     ///
     /// # Safety
-    /// Callers must ensure that the context reference is a valid pointer, and that they are responsible for disposing the
-    /// returned module reference by calling [`llvm_sys::core::LLVMDisposeModule`].
+    /// Callers must ensure that the context reference is a valid pointer.
     pub unsafe fn into_reference(
-        self,
+        mut self,
         context: llvm_sys::prelude::LLVMContextRef,
-    ) -> Result<llvm_sys::prelude::LLVMModuleRef, BuildError> {
+    ) -> Result<Wrapper, BuildError> {
         // Safety: module name is newly allocated and is valid.
         let reference = {
             let module_identfier = self.module.name().to_c_string();
 
-            llvm_sys::core::LLVMModuleCreateWithNameInContext(module_identfier.as_ptr(), context)
+            // Safety: module pointer is guaranteed to be valid.
+            Wrapper::new_unchecked(llvm_sys::core::LLVMModuleCreateWithNameInContext(
+                module_identfier.as_ptr(),
+                context,
+            ))
         };
 
-        // TODO: Figure out if things like CPU name, CPU features, code_layout, etc. of target machine is needed or can even be set.
         {
             // Safety: triple string is wrapped in message.
             let triple_string =
@@ -60,11 +66,84 @@ impl<'t> Builder<'t> {
                 ));
 
             // Safety: Message pointer is guaranteed to be valid.
-            llvm_sys::core::LLVMSetTarget(reference, triple_string.to_ptr());
+            llvm_sys::core::LLVMSetTarget(reference.reference(), triple_string.to_ptr());
         }
 
         // Safety: target layout was previously allocated and is valid.
-        llvm_sys::target::LLVMSetModuleDataLayout(reference, self.target.data_layout().reference());
+        llvm_sys::target::LLVMSetModuleDataLayout(
+            reference.reference(),
+            self.target.data_layout().reference(),
+        );
+
+        let mut type_cache = hash_map::HashMap::new();
+        let mut get_type = |t: Rc<types::FirstClass>| match type_cache.entry(t) {
+            hash_map::Entry::Occupied(occupied) => *occupied.get(),
+            hash_map::Entry::Vacant(vacant) => {
+                let type_reference = match std::convert::AsRef::as_ref(vacant.key()) {
+                    types::FirstClass::Single(single_value_type) => match single_value_type {
+                        types::SingleValue::Integer(integer_type) => llvm_sys::core::LLVMIntType(
+                            integer_type
+                                .size()
+                                .bits(),
+                        ),
+                        _ => todo!("single value type not yet supported"),
+                    },
+                    _ => todo!("type not yet supported"),
+                };
+
+                *vacant.insert(type_reference)
+            }
+        };
+
+        let mut function_type_cache = hash_map::HashMap::new();
+        let mut get_function_type =
+            |function_type: Rc<types::Function>| match function_type_cache.entry(function_type) {
+                hash_map::Entry::Occupied(occupied) => *occupied.get(),
+                hash_map::Entry::Vacant(vacant) => {
+                    let function_type = vacant.key();
+
+                    let return_type = match function_type.return_type() {
+                        types::Return::Void => {
+                            llvm_sys::core::LLVMVoidTypeInContext(reference.context())
+                        }
+                        types::Return::FirstClass(actual_return_type) => {
+                            get_type(actual_return_type.clone())
+                        }
+                    };
+
+                    let mut parameter_type_buffer = function_type
+                        .parameter_types()
+                        .iter()
+                        .map(|parameter_type| get_type(parameter_type.clone()))
+                        .collect::<Vec<_>>();
+
+                    *vacant.insert(llvm_sys::core::LLVMFunctionType(
+                        return_type,
+                        parameter_type_buffer.as_mut_ptr(),
+                        parameter_type_buffer
+                            .len()
+                            .try_into()
+                            .expect("too many parameters"),
+                        0,
+                    ))
+                }
+            };
+
+        for global in self.module.drain_global_values() {
+            match global {
+                global::Value::Function(function) => {
+                    let function_reference = llvm_sys::core::LLVMAddFunction(
+                        reference.reference(),
+                        function.name().to_c_string().as_ptr(),
+                        get_function_type(function.signature().clone()),
+                    );
+
+                    // TODO: Function attributes and other things.
+                }
+            }
+        }
+
+        //LLVMConstIntOfArbitraryPrecision for values
 
         Ok(reference)
     }
@@ -77,13 +156,14 @@ impl<'t> Builder<'t> {
         self,
         context: llvm_sys::prelude::LLVMContextRef,
     ) -> Result<interop::Message, BuildError> {
-        // Safety: module reference is not null.
-        let module = Wrapper::new_unchecked(self.into_reference(context)?);
+        let module = self.into_reference(context)?;
         // Safety: String representation is an LLVM message that is disposed when the message is dropped.
         Ok(interop::Message::from_ptr(
             llvm_sys::core::LLVMPrintModuleToString(module.reference()),
         ))
     }
+
+    //LLVMTargetMachineEmitToMemoryBuffer for emitting assembly or object file
 }
 
 /// A wrapper over an LLVM module reference.
@@ -100,12 +180,20 @@ impl Wrapper {
         Self(std::ptr::NonNull::new_unchecked(module))
     }
 
-    /// Returns the underlying module reference.
+    /// Gets the underlying module reference.
     ///
     /// # Safety
     /// Callers must ensure that the reference is used for the lifetime of the wrapper.
     pub unsafe fn reference(&self) -> llvm_sys::prelude::LLVMModuleRef {
         self.0.as_ptr()
+    }
+
+    /// Returns the underlying reference to the module.
+    ///
+    /// # Safety
+    /// Callers are responsible for disposing the returned module reference by calling [`llvm_sys::core::LLVMDisposeModule`].
+    pub unsafe fn into_reference(self) -> llvm_sys::prelude::LLVMModuleRef {
+        self.reference()
     }
 
     /// Returns the context associated with the module.
