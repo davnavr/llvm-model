@@ -3,6 +3,7 @@
 //! See [the LLVM instruction set reference here](https://llvm.org/docs/LangRef.html#instruction-reference).
 
 use crate::value::Value;
+use std::cell::{Cell, RefCell};
 use std::fmt::{Display, Formatter, Write as _};
 use std::rc::Rc;
 
@@ -41,35 +42,35 @@ impl Display for Instruction {
 /// An LLVM basic block contains the instructions that make up function definitions.
 #[derive(Debug)]
 pub struct BasicBlock {
-    instructions: Vec<Instruction>,
-    terminated: bool,
+    instructions: RefCell<Vec<Instruction>>,
+    terminated: Cell<bool>,
 }
 
 impl BasicBlock {
     /// Creates an empty basic block containing no instructions.
     pub fn new() -> Rc<Self> {
         Rc::new(Self {
-            instructions: Vec::new(),
-            terminated: false,
+            instructions: RefCell::default(),
+            terminated: Cell::new(false),
         })
     }
 
-    fn append_instruction(&mut self, instruction: Instruction) {
-        if self.terminated {
+    fn append_instruction(&self, instruction: Instruction) {
+        if self.terminated.get() {
             panic!(
                 "attempt to append instruction {}, but block {} already ends with a terminator instruction",
                 instruction,
                 BlockLabel(self),
             );
         } else {
-            self.instructions.push(instruction)
+            self.instructions.borrow_mut().push(instruction)
         }
     }
 
     /// Appends an `ret` instruction, which returns control flow back to the calling function.
-    pub fn ret(&mut self, value: Option<Value>) {
+    pub fn ret(&self, value: Option<Value>) {
         self.append_instruction(Instruction::Ret(value));
-        self.terminated = true;
+        self.terminated.set(true);
     }
 }
 
@@ -77,7 +78,7 @@ impl Display for BasicBlock {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         block_name(self, f)?;
         writeln!(f, ":")?;
-        for instruction in self.instructions.iter() {
+        for instruction in self.instructions.borrow().iter() {
             writeln!(f, "  {}", instruction)?;
         }
         Ok(())

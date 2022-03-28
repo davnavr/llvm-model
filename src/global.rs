@@ -154,6 +154,9 @@ pub struct Function {
     name: Identifier,
     signature: Rc<types::Function>,
     information: RefCell<FunctionInformation>,
+    // TODO: Move Copy fields here, since it is faster and UnsafeCell/Cell has no memory space overhead.
+    //calling_convention: Cell<CallingConvention>,
+    //linkage: Cell<Linkage>,
 }
 
 impl Function {
@@ -235,7 +238,16 @@ impl Display for Function {
         }
         f.write_char(')')?;
         // other things
-        //'{' and then the basic blocks
+
+        let basic_blocks = &self.information.borrow().basic_blocks;
+        if !basic_blocks.is_empty() {
+            writeln!(f, " {{")?;
+            for block in basic_blocks.iter() {
+                writeln!(f, "{}", block)?;
+            }
+            writeln!(f, "}}")?;
+        }
+
         Ok(())
     }
 }

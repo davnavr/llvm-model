@@ -1,6 +1,6 @@
 /// Test to showcase basic APIs of `llvm-model` as well as interoperation with `llvm-sys`.
 fn main() {
-    use llvm_model::{global, interop, target, types, Identifier};
+    use llvm_model::{block, global, interop, target, types, Identifier};
 
     // Gathers information about the target machine, unsafe as it calls LLVM C API functions.
     let host_target = unsafe {
@@ -22,10 +22,16 @@ fn main() {
     {
         let module = builder.module();
 
-        module.add_global_value(global::Function::new(
+        let main = global::Function::new(
             Identifier::try_from("main").unwrap(),
             types::Function::new(types::Return::Void, Vec::new()),
-        ));
+        );
+
+        let entry_block = block::BasicBlock::new();
+        entry_block.ret(None);
+
+        main.append_basic_block(entry_block);
+        module.add_global_value(main);
 
         println!("{}", module);
     }
