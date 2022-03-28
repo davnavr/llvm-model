@@ -206,6 +206,7 @@ impl Function {
 
     #[cfg(feature = "_internal_deconstructors")]
     pub(crate) fn take_basic_blocks(&self) -> Vec<Rc<BasicBlock>> {
+        //iter_basic_blocks
         std::mem::take(&mut self.information.borrow_mut().basic_blocks)
     }
 }

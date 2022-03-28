@@ -1,5 +1,6 @@
 //! Code to interop with LLVM's C APIs for writing a module.
 
+use crate::block;
 use crate::global;
 use crate::interop::llvm_sys as interop;
 use crate::types;
@@ -142,6 +143,11 @@ impl<'t> Builder<'t> {
                 }
             };
 
+        // Safety: Builder is disposed after all functions are generated.
+        let instruction_builder = llvm_sys::core::LLVMCreateBuilderInContext(reference.context());
+
+        //LLVMConstIntOfArbitraryPrecision for values
+
         for global in self.module.drain_global_values() {
             match global {
                 global::Value::Function(function) => {
@@ -169,7 +175,21 @@ impl<'t> Builder<'t> {
                             empty_string.as_ptr(),
                         );
 
-                        // TODO: Add instructions
+                        llvm_sys::core::LLVMPositionBuilderAtEnd(
+                            instruction_builder,
+                            block_reference,
+                        );
+
+                        for instruction in block.take_instructions().drain(..) {
+                            use block::Instruction as Instr;
+
+                            match instruction {
+                                Instr::Ret(None) => {
+                                    llvm_sys::core::LLVMBuildRetVoid(instruction_builder);
+                                }
+                                _ => todo!("bad instr"),
+                            }
+                        }
                     }
 
                     // TODO: Function attributes and other things.
@@ -177,7 +197,7 @@ impl<'t> Builder<'t> {
             }
         }
 
-        //LLVMConstIntOfArbitraryPrecision for values
+        llvm_sys::core::LLVMDisposeBuilder(instruction_builder);
 
         // TODO: Validate module?
 

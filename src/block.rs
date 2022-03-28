@@ -73,6 +73,12 @@ impl BasicBlock {
         self.append_instruction(Instruction::Ret(value));
         self.terminated.set(true);
     }
+
+    #[cfg(feature = "_internal_deconstructors")]
+    pub(crate) fn take_instructions(&self) -> Vec<Instruction> {
+        // iter_instructions
+        self.instructions.take()
+    }
 }
 
 impl Display for BasicBlock {
