@@ -203,6 +203,11 @@ impl Function {
     pub fn append_basic_block(&self, basic_block: Rc<BasicBlock>) {
         self.information.borrow_mut().basic_blocks.push(basic_block)
     }
+
+    #[cfg(feature = "_internal_deconstructors")]
+    pub(crate) fn take_basic_blocks(&self) -> Vec<Rc<BasicBlock>> {
+        std::mem::take(&mut self.information.borrow_mut().basic_blocks)
+    }
 }
 
 impl Debug for Function {

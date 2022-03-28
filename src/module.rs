@@ -54,7 +54,7 @@ impl<'t> Module<'t> {
         self.global_values.push(value.into())
     }
 
-    #[cfg(feature = "llvm_sys_interop")]
+    #[cfg(feature = "_internal_deconstructors")]
     pub(crate) fn drain_global_values(&mut self) -> std::vec::Drain<'_, global::Value> {
         self.global_values.drain(..)
     }

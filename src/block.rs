@@ -21,7 +21,7 @@ impl Display for BlockLabel<'_> {
 }
 
 #[derive(Debug)]
-enum Instruction {
+pub(crate) enum Instruction {
     Ret(Option<Value>),
 }
 
@@ -42,6 +42,7 @@ impl Display for Instruction {
 /// An LLVM basic block contains the instructions that make up function definitions.
 #[derive(Debug)]
 pub struct BasicBlock {
+    //name: Identifier,
     instructions: RefCell<Vec<Instruction>>,
     terminated: Cell<bool>,
 }

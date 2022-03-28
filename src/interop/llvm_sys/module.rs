@@ -47,6 +47,8 @@ impl<'t> Builder<'t> {
         mut self,
         context: llvm_sys::prelude::LLVMContextRef,
     ) -> Result<Wrapper, BuildError> {
+        let empty_string = std::ffi::CString::default();
+
         // Safety: module name is newly allocated and is valid.
         let reference = {
             let module_identfier = self.module.name().to_c_string();
@@ -136,12 +138,32 @@ impl<'t> Builder<'t> {
                         get_function_type(function.signature().clone()),
                     );
 
+                    llvm_sys::core::LLVMSetFunctionCallConv(
+                        function_reference,
+                        function.get_calling_convention().value(),
+                    );
+
+                    // TODO: Iterate over all blocks
+                    for block in function.take_basic_blocks().drain(..) {
+                        let block_reference = llvm_sys::core::LLVMAppendBasicBlockInContext(
+                            reference.context(),
+                            function_reference,
+                            empty_string.as_ptr(),
+                        );
+
+                        // TODO: Add instructions
+                    }
+
+                    //LLVMSetLinkage
+
                     // TODO: Function attributes and other things.
                 }
             }
         }
 
         //LLVMConstIntOfArbitraryPrecision for values
+
+        // TODO: Validate module?
 
         Ok(reference)
     }
