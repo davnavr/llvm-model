@@ -1,9 +1,10 @@
 //! Modules consist of global values, which are global variables or function definitions.
 
+use crate::block::BasicBlock;
 use crate::types;
 use crate::{Id, Identifier};
-use std::cell::Cell;
-use std::fmt::{Display, Formatter, Write as _};
+use std::cell::RefCell;
+use std::fmt::{Debug, Display, Formatter, Write as _};
 use std::rc::Rc;
 
 // TODO: Split linkage types into those that are valid for global variables, functions, and both.
@@ -139,15 +140,20 @@ impl Display for CallingConvention {
     }
 }
 
+#[derive(Default)]
+struct FunctionInformation {
+    linkage: Linkage,
+    calling_convention: CallingConvention,
+    basic_blocks: Vec<Rc<BasicBlock>>,
+}
+
 /// A function definition or declaration.
 ///
 /// See [the latest LLVM documentation on functions here](https://llvm.org/docs/LangRef.html#functions).
-#[derive(Debug)]
 pub struct Function {
     name: Identifier,
     signature: Rc<types::Function>,
-    linkage: Cell<Linkage>,
-    calling_convention: Cell<CallingConvention>,
+    information: RefCell<FunctionInformation>,
 }
 
 impl Function {
@@ -156,8 +162,7 @@ impl Function {
         Rc::new(Self {
             name,
             signature: signature.into(),
-            linkage: Cell::default(),
-            calling_convention: Cell::default(),
+            information: RefCell::default(),
         })
     }
 
@@ -173,22 +178,39 @@ impl Function {
 
     /// Gets the linkage type for this function.
     pub fn get_linkage(&self) -> Linkage {
-        self.linkage.get()
+        self.information.borrow().linkage
     }
 
     /// Sets the linkage type for this function.
     pub fn set_linkage(&self, linkage: Linkage) {
-        self.linkage.set(linkage)
+        self.information.borrow_mut().linkage = linkage;
     }
 
     /// Gets the calling convention of this function.
     pub fn get_calling_convention(&self) -> CallingConvention {
-        self.calling_convention.get()
+        self.information.borrow().calling_convention
     }
 
     /// Sets the calling convention used by this function.
     pub fn set_calling_convention(&self, calling_convention: CallingConvention) {
-        self.calling_convention.set(calling_convention)
+        self.information.borrow_mut().calling_convention = calling_convention;
+    }
+
+    /// Appends a basic block.
+    pub fn append_basic_block(&self, basic_block: Rc<BasicBlock>) {
+        self.information.borrow_mut().basic_blocks.push(basic_block)
+    }
+}
+
+impl Debug for Function {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        f.debug_struct("Function")
+            .field("name", &self.name)
+            .field("signature", &self.signature)
+            .field("linkage", &self.get_linkage())
+            .field("calling_convention", &self.get_calling_convention())
+            .field("basic_blocks", &self.information.borrow().basic_blocks)
+            .finish()
     }
 }
 
