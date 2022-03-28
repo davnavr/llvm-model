@@ -24,5 +24,10 @@ fn main() {
         &host_target,
     );
 
-    println!("{}", unsafe { module.into_message(context) }.unwrap().to_identifier());
+    println!(
+        "{}",
+        unsafe { module.into_message(context) }
+            .unwrap()
+            .to_identifier()
+    );
 }

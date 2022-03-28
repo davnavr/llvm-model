@@ -1,17 +1,25 @@
 //! Library for writing LLVM IR.
 //!
-//! Useful links:
+//! # Useful links:
 //! - [LLVM language reference](https://llvm.org/docs/LangRef.html)
+//!
+//! # Error handling
+//! Invalid operations, such as a basic block using a register that is not defined or an invalid linkage type being used,
+//! result in panics. This is because these errors are treated as a bug in the compiler that is using `llvm-model`, and these
+//! errors are not expected to be handled such as with the `Err` case of a result, resulting in more convenient return types.
 
 #![deny(missing_docs, missing_debug_implementations)]
 
+pub mod block;
 pub mod global;
 pub mod identifier;
 pub mod interop;
 pub mod module;
 pub mod target;
 pub mod types;
+pub mod value;
 
+pub use block::BasicBlock;
 pub use identifier::{Id, Identifier};
 pub use module::Module;
 pub use target::Target;

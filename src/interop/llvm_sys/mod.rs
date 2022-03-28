@@ -1,6 +1,6 @@
 //! Contains implementations of traits for interoperation with the Rust bindings of the LLVM C API.
 //!
-//! Useful links:
+//! # Useful links:
 //! - [Latest API documentation for `llvm-sys`](https://docs.rs/llvm-sys/latest/llvm_sys/)
 //! - [Documentation for the LLVM C API](https://llvm.org/doxygen/group__LLVMC.html)
 

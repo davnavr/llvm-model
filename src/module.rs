@@ -9,6 +9,7 @@ use crate::target;
 /// An LLVM module, containing global values and their symbols.
 pub struct Module<'t> {
     name: Identifier,
+    //source_file_name: Identifier,
     target: &'t target::Target,
     global_values: Vec<global::Value>,
 }
@@ -65,6 +66,7 @@ impl std::fmt::Debug for Module<'_> {
 
 impl std::fmt::Display for Module<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        writeln!(f, "; ModuleID = '{}'", self.name())?;
         writeln!(f, "target triple = \"{}\"", self.target_triple())?;
         writeln!(f, "target datalayout = \"{}\"", self.target_layout())?;
         for global in self.global_values.iter() {
