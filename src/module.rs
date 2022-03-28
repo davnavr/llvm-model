@@ -50,8 +50,8 @@ impl<'t> Module<'t> {
     }
 
     /// Adds a global value to this module, without checking for duplicate symbols.
-    pub fn add_global_value(&mut self, value: global::Value) {
-        self.global_values.push(value)
+    pub fn add_global_value<G: Into<global::Value>>(&mut self, value: G) {
+        self.global_values.push(value.into())
     }
 }
 

@@ -180,14 +180,14 @@ impl Display for SingleValue {
 
 /// Describes the type of value returned by a function.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum ReturnType {
+pub enum Return {
     /// A type representing no value.
     Void,
     /// A return type.
     FirstClass(FirstClass),
 }
 
-impl Display for ReturnType {
+impl Display for Return {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         match self {
             Self::FirstClass(return_type) => Display::fmt(return_type, f),
@@ -199,13 +199,13 @@ impl Display for ReturnType {
 /// Represents a function type, which describes the return types and parameter types of a function.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Function {
-    return_type: ReturnType,
+    return_type: Return,
     parameter_types: Vec<FirstClass>,
 }
 
 impl Function {
     /// Creates a function type.
-    pub fn new(return_type: ReturnType, parameter_types: impl Into<Vec<FirstClass>>) -> Self {
+    pub fn new(return_type: Return, parameter_types: impl Into<Vec<FirstClass>>) -> Self {
         Self {
             return_type,
             parameter_types: parameter_types.into(),
@@ -213,7 +213,7 @@ impl Function {
     }
 
     /// Gets the return type.
-    pub fn return_type(&self) -> &ReturnType {
+    pub fn return_type(&self) -> &Return {
         &self.return_type
     }
 

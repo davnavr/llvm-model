@@ -226,6 +226,8 @@ pub enum Value {
     Function(Rc<Function>),
 }
 
+crate::enum_case_from!(Value, Function, Rc<Function>);
+
 impl Display for Value {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         match self {
