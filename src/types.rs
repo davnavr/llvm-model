@@ -45,36 +45,6 @@ impl Display for IntegerSize {
     }
 }
 
-/// Represents an integer type of an arbitrary bit width.
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub enum Integer {
-    /// A signed integer type.
-    Signed(IntegerSize),
-    /// An unsigned integer type.
-    Unsigned(IntegerSize),
-}
-
-impl Integer {
-    /// Gets the size of the integer.
-    pub fn size(&self) -> IntegerSize {
-        match self {
-            Self::Signed(size) | Self::Unsigned(size) => *size,
-        }
-    }
-}
-
-impl Display for Integer {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        let (signed, size) = match self {
-            Self::Signed(size) => (true, size),
-            Self::Unsigned(size) => (false, size),
-        };
-
-        f.write_char(if signed { 'i' } else { 'u' })?;
-        Display::fmt(size, f)
-    }
-}
-
 /// Represents a floating-point type.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum Float {
@@ -178,8 +148,8 @@ impl Display for Vector {
 /// A subset of the types that are valid in registers.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum SingleValue {
-    /// Fixed size integer type.
-    Integer(Integer),
+    /// An integer type of an arbitrary bit width.
+    Integer(IntegerSize),
     /// Floating point type.
     Float(Float),
     /// A pointer type.
@@ -191,7 +161,7 @@ pub enum SingleValue {
 impl Display for SingleValue {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         match self {
-            Self::Integer(integer) => Display::fmt(integer, f),
+            Self::Integer(size) => write!(f, "i{}", size),
             Self::Float(float) => Display::fmt(float, f),
             Self::Pointer(pointer) => Display::fmt(pointer, f),
             Self::Vector(vector) => Display::fmt(vector, f),

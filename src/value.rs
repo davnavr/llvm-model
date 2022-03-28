@@ -12,7 +12,7 @@ enum IntegerValue {
 /// Integer value of a specified type.
 #[derive(Clone, Debug)]
 pub struct Integer {
-    integer_type: types::Integer,
+    integer_type: types::IntegerSize,
     value: IntegerValue,
 }
 

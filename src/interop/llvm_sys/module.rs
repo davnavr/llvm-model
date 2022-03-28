@@ -81,11 +81,9 @@ impl<'t> Builder<'t> {
             hash_map::Entry::Vacant(vacant) => {
                 let type_reference = match std::convert::AsRef::as_ref(vacant.key()) {
                     types::FirstClass::Single(single_value_type) => match single_value_type {
-                        types::SingleValue::Integer(integer_type) => llvm_sys::core::LLVMIntType(
-                            integer_type
-                                .size()
-                                .bits(),
-                        ),
+                        types::SingleValue::Integer(integer_size) => {
+                            llvm_sys::core::LLVMIntType(integer_size.bits())
+                        }
                         _ => todo!("single value type not yet supported"),
                     },
                     _ => todo!("type not yet supported"),
